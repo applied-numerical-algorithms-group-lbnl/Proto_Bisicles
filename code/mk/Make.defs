@@ -52,59 +52,8 @@ include $(NONE_DEFS)
 endif
 endif
 
-#if PYTHON_INC was not defined, try to work it out from PYTHON_VERSION
-ifeq ($(PYTHON_INC),)
 
-ifeq ($(PYTHON_VERSION),2.7)
-#python 2.7 standard install
-PYTHON_INC := -I/usr/include/python2.7 
-PYTHON_LIBS := -lpython2.7
-endif
-
-ifeq ($(PYTHON_VERSION),2.6)
-#python 2.6 standard install
-PYTHON_INC := -I/usr/include/python2.6
-PYTHON_LIBS := -lpython2.6
-endif
-
-ifeq ($(PYTHON_VERSION),2.4)
-#python 2.4 standard install
-PYTHON_INC := -I/usr/include/python2.4
-PYTHON_LIBS := -lpython2.4
-endif
-
-endif
-
-$(info python: $(PYTHON_INC) $(PYTHON_LIBS) )
-ifneq ($(PYTHON_INC),)
-CPPFLAGS :=$(PYTHON_INC) -DHAVE_PYTHON	$(CPPFLAGS)
-LIBFLAGS+=$(PYTHON_LIBS) 
-endif
-
-SVN_REV=$(shell cd $(BISICLES_BRANCH) ; svnversion -n)
-ifeq ($(SVN_REV),)
-SVN_REV := unknown
-SVN_REP := unknown
-SVN_URL := unknown
-else
-
-SVN_REP := $(shell cd $(BISICLES_BRANCH) ; svn info | awk '/Repository Root:/ {print $$3}')
-ifeq ($(SVN_REP),)
-SVN_REP := unknown
-endif
-
-SVN_URL := $(shell cd $(BISICLES_BRANCH) ; svn info | awk '/^URL:/ {print $$2}')
-ifeq ($(SVN_URL),)
-SVN_URL := unknown
-endif
-
-endif
-
-CPPFLAGS += -DSVN_REV='"$(SVN_REV)"'
-CPPFLAGS += -DSVN_REP='"$(SVN_REP)"'
-CPPFLAGS += -DSVN_URL='"$(SVN_URL)"'
-
-nolink: $(shell $(CHOMBO_HOME)/mk/reverse $(LibNames)) $(objects)  
+xonolink: $(shell $(CHOMBO_HOME)/mk/reverse $(LibNames)) $(objects)  
 	@echo BISICLES Objects built
 
 

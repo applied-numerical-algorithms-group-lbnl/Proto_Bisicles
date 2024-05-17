@@ -4,9 +4,13 @@
 * This particular variant is being used to develop a proto-based ice sheet solver
 and, as such, will be a frozen version of the ice sheet solver except for a few,
 well-identified locations.
+* I gutted out of the make system its svn and python dependencies because they were getting in
+the way.    All changes to the make system should not be propogated as the real BISICLES has
+a system that holds together for its users. 
 
 # Changed source files:
-* AmrIce.cpp
+* AmrIce.cpp  
+
 
 # New Source files:
 * Proto_FAS_IceSolver.H
