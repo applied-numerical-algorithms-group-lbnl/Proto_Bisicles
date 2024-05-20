@@ -26,19 +26,12 @@ basalFlux.type = zeroFlux
 
 CalvingModel.type = NoCalvingModel
 
-amr.maxLevel = 6   # finest level allowed in simulation
-amr.ref_ratio = 2 2 2 2 2 2 2 2 2 2 2 2
-amr.num_cells = 0008 0008 16   #number of cells in base grid
-#amr.num_cells = 0016 0016 16   #number of cells in base grid
-#amr.num_cells = 0032 0032 16   #number of cells in base grid
-#amr.num_cells = 0064 0064 16   #number of cells in base grid
-#amr.num_cells = 0128 0128 16   #number of cells in base grid
-#amr.num_cells = 0256 0256 16   #number of cells in base grid
-#amr.num_cells = 0512 0512 16   #number of cells in base grid
-#amr.num_cells =  1024 1024 16   #number of cells in base grid
-#amr.num_cells =  2048 2048 16   #number of cells in base grid
-#amr.num_cells =  4096 4096 16   #number of cells in base grid
-amr.is_periodic = 1 1 1    # 1 if domain is periodic 
+
+
+amr.maxLevel = MAX_LEVEL_NUMBER         # finest level allowed in simulation
+amr.num_cells = NCELLS_X N_CELLS_Y 16   # number of cells in base grid
+amr.ref_ratio = 2 2 2 2 2 2 2 2 2 2 2 2 # refinement ratio between levels
+amr.is_periodic = 1 1 1                 # 1 if domain is periodic 
 # (note that periodic BC's override physical BC types)
 # physical BC types:  0 = homogeneous Dirichlet
 #                     1 = homogeneous Neumann
