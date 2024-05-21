@@ -4,21 +4,21 @@
 * This particular variant is being used to develop a proto-based ice sheet solver
 and, as such, will be a frozen version of the ice sheet solver except for a few,
 well-identified locations.
-* I gutted out of the make system its svn and python dependencies because they were getting in
-the way.    All changes to the make system should not be propogated as the real BISICLES has
-a system that holds together for its users. 
+
+# Changes from the real BISICLES:
+* BISICLES has a very nice system for version control that uses svn and python that  has been taken out of this repository since I did not want to reprogram it for git.
+* The fortran-based FAS solver in BISICLES works with AMRFAS which is an early implementation
+  of AMRFASMultiGrid (which lives in Chombo). FASIceSolver is therefore being rewritten to use the more recent interface.
 
 # Changed source files:
-* AmrIce.cpp  
-
+* AmrIce.{H,cpp}
 
 # New Source files:
 * Proto_FAS_IceSolver.H
 * Proto_FAS_IceSolver.cpp
 
 # New Directories:
-* exec_fortran
-* exec_proto
-* src_proto
-* test_harness
+* code/exec2D/fas_fortran
+* code/exec2D/_fas_proto
+* code/test_harness
 
