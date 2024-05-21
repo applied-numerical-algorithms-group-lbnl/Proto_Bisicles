@@ -31,7 +31,7 @@ FASIceViscouseTensorOp::FASIceViscouseTensorOp( int a_o,
 						const BasalFrictionRelation* a_basalFrictionRelPtr,
 						IceThicknessIBC* a_bc
 						) :
-  AMRFAS_LDFOp( a_o, a_grid ),
+  AMRLevelOp<LevelData<FArrayBox>>(), 
   m_constThetaVal(238.15), // use isothermal ice temp from Pattyn(2003)
   m_vtopSafety(VTOP_DEFAULT_SAFETY),
   m_constRelPtr(a_constRelPtr),
@@ -76,11 +76,12 @@ FASIceViscouseTensorOp::applyLevel( LevelData<FArrayBox>& a_lhs,
       // trick to get VTO to recompute D^-1 (m_relaxCoef)
       m_VTO->setAlphaAndBeta( m_VTO->getAlpha(), m_VTO->getBeta() ); 
       // this is used for G-S and Rich
-      scale( m_VTO->m_relaxCoef, m_smoothing_damping_factor );
+      //m_s_d_f defaults to 1.0 --dtg
+      //scale( m_VTO->m_relaxCoef, m_smoothing_damping_factor );
     }
 
   // this applies BCs
-  m_VTO->applyOp( a_lhs, a_phi, true ); // homogenous ? 
+  m_VTO->applyOp( a_lhs, a_phi, false ); //this used to be homogeneous --dtg 
 }
 
 // ---------------------------------------------------------
@@ -99,8 +100,9 @@ FASIceViscouseTensorOp::levelGSRB( RefCountedPtr<LevelData<FArrayBox> > a_phi,
       
       computeMu( phi, 0, 0 ); // lets do this a lot for now  
       // trick to get VTO to recompute D^-1 (m_relaxCoef)
-      m_VTO->setAlphaAndBeta( m_VTO->getAlpha(), m_VTO->getBeta() ); 
-      scale( m_VTO->m_relaxCoef, m_smoothing_damping_factor );
+      m_VTO->setAlphaAndBeta( m_VTO->getAlpha(), m_VTO->getBeta() );
+      //s_d_f defaults to 1
+      //scale( m_VTO->m_relaxCoef, m_smoothing_damping_factor );
     }
 
   m_VTO->relax( *a_phi, *a_rhs, 1 );
@@ -386,23 +388,20 @@ void FASIceViscouseTensorOpFactory::define( const ProblemDomain& a_coarseDomain,
 /** beta scales sliding coefficient C == acoef in terms of the ViscousTensorOp
  */
 int
-FASIceSolver::solve( Vector<LevelData<FArrayBox>* >& a_horizontalVel,
-		     Vector<LevelData<FArrayBox>* >& a_calvedIce,
-		     Vector<LevelData<FArrayBox>* >& a_addedIce,
-		     Vector<LevelData<FArrayBox>* >& a_removedIce,
-		     Real& a_initialResidualNorm, 
-		     Real& a_finalResidualNorm,
-		     const Real a_convergenceMetric,
-		     const Vector<LevelData<FArrayBox>* >& a_rhs,
-		     const Vector<LevelData<FArrayBox>* >& a_beta,  // Basal C (a_beta)
-		     const Vector<LevelData<FArrayBox>* >& a_beta0, // not used
-		     const Vector<LevelData<FArrayBox>* >& a_A,
-		     const Vector<LevelData<FluxBox>* >& a_muCoef,  // not used, this is computed
-		     Vector<RefCountedPtr<LevelSigmaCS > >& a_coordSys,
-		     Real a_time,
-		     int a_lbase, 
-		     int a_maxLevel
-		     )
+FASIceSolver::solve(Vector<LevelData<FArrayBox>* >& a_horizontalVel,
+                    Vector<LevelData<FArrayBox>* >& a_calvedIce,
+                    Vector<LevelData<FArrayBox>* >& a_addedIce,
+                    Vector<LevelData<FArrayBox>* >& a_removedIce,
+                    Real& a_initialResidualNorm, Real& a_finalResidualNorm,
+                    const Real a_convergenceMetric,
+                    const Vector<LevelData<FArrayBox>* >& a_rhs,
+                    const Vector<LevelData<FArrayBox>* >& a_C,
+                    const Vector<LevelData<FArrayBox>* >& a_C0,
+                    const Vector<LevelData<FArrayBox>* >& a_A,
+                    const Vector<LevelData<FArrayBox>* >& a_muCoef,
+                    Vector<RefCountedPtr<LevelSigmaCS > >& a_coordSys,
+                    Real a_time,
+                    int a_lbase, int a_maxLevel);
 {
   CH_TIME("FASIceSolver::solve");
 

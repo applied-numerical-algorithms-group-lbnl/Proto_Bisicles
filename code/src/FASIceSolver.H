@@ -13,7 +13,7 @@
 
 #include "IceVelocitySolver.H"
 #include "ViscousTensorOp.H"
-#include "AMRFAS.H"
+#include "AMRFASMultiGrid.H"
 
 #include "NamespaceHeader.H"
 
@@ -21,7 +21,7 @@
 /**
    Factory to create AMR FASIceViscouseTensorOp(s) -- these two classes should be cloned to add operators
 */
-class FASIceViscouseTensorOpFactory: public AMRFAS_LDFOpFactory
+class FASIceViscouseTensorOpFactory: public AMRLevelOpFactory< LevelData< FArrayBox > >
 {
 public:
   //! Constructor.
@@ -45,7 +45,7 @@ public:
 		       );
 
   /// override base
-  virtual RefCountedPtr<AMRFASOp<LevelData<FArrayBox> > > 
+  virtual RefCountedPtr<AMRLevelOp<LevelData<FArrayBox> > > 
   AMRNewOp(int a_ilev, 
 	   const DisjointBoxLayout& a_grid,
 	   bool a_isSR = false );
@@ -63,7 +63,7 @@ public:
 /**
    ViscouseTensor derived class for FAS operator
 */
-class FASIceViscouseTensorOp : public AMRFAS_LDFOp
+class FASIceViscouseTensorOp : public AMRLevelOp< LevelData<FArrayBox> >
 {
   friend class FASIceViscouseTensorOpFactory;
 public:
@@ -80,7 +80,7 @@ public:
     if(m_VTO) delete m_VTO;
   }
 
-  virtual void restrictState( RefCountedPtr<AMRFASOp<LevelData<FArrayBox> > >,
+  virtual void restrictState( RefCountedPtr<AMRLevelOp<LevelData<FArrayBox> > >,
 			      Copier &a_copier );
 
   virtual bool computeState( RefCountedPtr<LevelData<FArrayBox> > a_phi, 
@@ -96,7 +96,7 @@ protected:
   virtual void reflux(const LevelData<FArrayBox>&        a_phiFine,
 		      const LevelData<FArrayBox>&        a_phi,
                       LevelData<FArrayBox>&              a_residual,
-		      AMRFASOp<LevelData<FArrayBox> >*   a_finerOp );
+		      AMRLevelOp<LevelData<FArrayBox> >*   a_finerOp );
 
   virtual void levelGSRB( RefCountedPtr<LevelData<FArrayBox> >       a_phi,
 			  const RefCountedPtr<LevelData<FArrayBox> > a_rhs
@@ -140,7 +140,7 @@ public:
 
 /// virtual class to manage the nonlinear solve for the ice-sheet
 /// momentum 
-class FASIceSolver : public IceVelocitySolver, public AMRFAS<LevelData<FArrayBox> >
+class FASIceSolver : public IceVelocitySolver, public AMRFASMultiGrid<LevelData<FArrayBox> >
 {
 
 public:
@@ -163,7 +163,7 @@ public:
                       IceThicknessIBC* a_bc,
                       int a_numLevels);
   
-  virtual void setTolerance( Real a_tolerance ) { m_rtol = a_tolerance; }
+  virtual void setTolerance( Real a_tolerance ) { m_eps = a_tolerance; }
 
   /// set "absolute tolerance"
   /** If norm(residual) drops below the absolute tolerance (regardless 
@@ -173,12 +173,12 @@ public:
   //virtual void setAbsoluteTolerance(Real a_tolerance) {m_atol = a_tolerance;}
 
   /// sets maximum number of FAS iterations
-  virtual void setMaxIterations(int a_max_iter) { m_max_iter = a_max_iter; }
+  //virtual void setMaxIterations(int a_max_iter) { m_maxIter = a_max_iter; }
   
-  virtual void setVerbosity(int a_verbosity) {
-    IceVelocitySolver::m_verbosity = a_verbosity;
-    AMRFAS<LevelData<FArrayBox> >::m_verbosity = a_verbosity;
-  }
+//  virtual void setVerbosity(int a_verbosity) {
+//    IceVelocitySolver::m_verbosity = a_verbosity;
+//    AMRFASMultiGrid<LevelData<FArrayBox> >::m_verbosity = a_verbosity;
+//  }
   
   /// full solve for non-isothermal ice
   virtual int solve( Vector<LevelData<FArrayBox>* >& a_horizontalVel,
@@ -204,7 +204,6 @@ protected:
   bool m_writeResidToPlotFile;
   //const int m_sizeA;
 };
-
 #include "NamespaceFooter.H"
 
 #endif
