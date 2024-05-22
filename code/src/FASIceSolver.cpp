@@ -25,10 +25,11 @@ static bool s_always_recompute_mu = false; // this does help convergance but it 
 /**
    FASIceViscouseTensorOp: FAS IceViscouseTensor Op class
 */
-FASIceViscouseTensorOp::FASIceViscouseTensorOp( int a_o, 
-						const DisjointBoxLayout &a_grid,
-						const ConstitutiveRelation*  a_constRelPtr,
-						const BasalFrictionRelation* a_basalFrictionRelPtr,
+FASIceViscouseTensorOp::FASIceViscouseTensorOp( int                                 a_o, 
+						const DisjointBoxLayout &           a_grid,
+                                                const RealVect          &           a_rvdx,
+						const ConstitutiveRelation*         a_constRelPtr,
+						const BasalFrictionRelation*        a_basalFrictionRelPtr,
 						IceThicknessIBC* a_bc
 						) :
   AMRLevelOp<LevelData<FArrayBox>>(), 
@@ -39,6 +40,8 @@ FASIceViscouseTensorOp::FASIceViscouseTensorOp( int a_o,
   m_VTO(0),
   m_bc(a_bc)
 {
+  m_grids = a_grid;
+  m_rvdx  = a_rvdx;
   // beta only has one component...
   m_Beta = RefCountedPtr<LevelData<FArrayBox> >(new LevelData<FArrayBox>(a_grid,
 									 1, 
@@ -111,6 +114,16 @@ FASIceViscouseTensorOp::levelGSRB( RefCountedPtr<LevelData<FArrayBox> > a_phi,
 // ---------------------------------------------------------
 // levelRich
 // ---------------------------------------------------------
+ void
+ FASIceViscouseTensorOp::mult( LevelData<FArrayBox>      & a_lhs,
+                              const LevelData<FArrayBox>& a_factor) const
+ {
+   DataIterator dit = a_lhs.disjointBoxLayout().dataIterator();
+   for(int ibox = 0; ibox < dit.size(); ibox++)
+   {
+     a_lhs[dit[ibox]] *= a_factor[dit[ibox]];
+   }
+ }
 void 
 FASIceViscouseTensorOp::levelRich( RefCountedPtr<LevelData<FArrayBox> > a_phi,
 				   const  RefCountedPtr<LevelData<FArrayBox> > a_rhs
@@ -128,42 +141,44 @@ FASIceViscouseTensorOp::levelRich( RefCountedPtr<LevelData<FArrayBox> > a_phi,
     LevelData<FArrayBox> tmp;
     create( tmp, *a_rhs );
     
-    // apply has BCs, exchange and C-F interp done before (eg, in compute state)
-    apply( tmp, *a_phi, 0, false ); // applies BCs, calls applyLevel, exchange done above
+    m_VTO->applyOpNoExchange( tmp, *a_phi, false ); // applies BCs, calls applyLevel, exchange done above
 
     // x = x + omega D^-1 (b - Ax) ; D == alaph - 2*beta*Dim/h^2
     axby( tmp, tmp, *a_rhs, -1.0, 1.0 );    // (b - Ax) 
 
     mult( tmp, m_VTO->m_relaxCoef );       // D^-1(b - Ax) 
 
-    axby( *a_phi, *a_phi, tmp, 1.0, omega ); // X = X + omega D^-1 (b - Ax) 
+    m_VTO->axby( *a_phi, *a_phi, tmp, 1.0, omega ); // X = X + omega D^-1 (b - Ax) 
   }
 }
 
 // ---------------------------------------------------------
 void 
-FASIceViscouseTensorOp::restrictState( RefCountedPtr<AMRFASOp<LevelData<FArrayBox> > > a_fOp, // fine op
+FASIceViscouseTensorOp::restrictState( RefCountedPtr<AMRLevelOp<LevelData<FArrayBox> > > a_fOp, // fine op
 				       Copier &a_copier )    // copier from buffer to real distribution
 {
   CH_TIME("FASIceViscouseTensorOp::restrictState");
   const FASIceViscouseTensorOp * const fop = dynamic_cast<FASIceViscouseTensorOp*>( &(*a_fOp) );
   CH_assert(fop);
-  int nRef = fop->refToCoarser();
+  FASIceViscouseTensorOp* castop = (FASIceViscouseTensorOp*)fop;
+  
+  int nRef = castop->refToCoarser();
 
   // average material parameters to coarser (this)
   m_time = fop->m_time; // this just gets passed up
-  m_coordSys = RefCountedPtr<LevelSigmaCS>(new LevelSigmaCS( m_grid, 
-							     m_dx, 
+
+  m_coordSys = RefCountedPtr<LevelSigmaCS>(new LevelSigmaCS( m_grids, 
+							     m_rvdx, 
 							     *fop->m_coordSys,
 							     nRef
 							     ));
   const LevelData<FluxBox> &f_faceA = *fop->m_faceA;
-  const DisjointBoxLayout& fdbl = fop->m_grid;  
+  const DisjointBoxLayout& fdbl = m_grids;
   CH_assert( fdbl.coarsenable(nRef) );
   const int aNC = fop->m_faceA->nComp();
   if( !m_faceA )
     {
-      m_faceA = RefCountedPtr<LevelData<FluxBox> >(new LevelData<FluxBox>( m_grid,
+      m_faceA = RefCountedPtr<LevelData<FluxBox> >(new LevelData<FluxBox>( m_grids,
 									   aNC,
 									   IntVect::Unit) );
       // zero out because averageToCoarse does not fill everything?
@@ -257,9 +272,16 @@ FASIceViscouseTensorOpFactory::FASIceViscouseTensorOpFactory(ConstitutiveRelatio
 RefCountedPtr<AMRFASOp<LevelData<FArrayBox> > > 
 FASIceViscouseTensorOpFactory::AMRNewOp( int a_ilev, const DisjointBoxLayout& a_grid, bool a_isSR_dummy )
 {
+  RealVect rvdx = m_crsDx;
+  for(int ilev = 0; ilev < a_ilev; ilev++)
+  {
+    Real denom = Real(m_refRatios[ilev]);
+    rvdx /= denom;
+  }
   RefCountedPtr<FASIceViscouseTensorOp> newOp = 
     RefCountedPtr<FASIceViscouseTensorOp>( new FASIceViscouseTensorOp( 2, 
-								       a_grid, 
+								       a_grid,
+                                                                       rvdx,
 								       m_constRelPtr,
 								       m_basalFrictionRelPtr, 
 								       m_bc
@@ -318,15 +340,20 @@ FASIceSolver::define( const ProblemDomain& a_coarseDomain,
 //  AMR Factory define 
 //    - override base define
 //
-void FASIceViscouseTensorOpFactory::define( const ProblemDomain& a_coarseDomain, 
-					    const RealVect&      a_crsDx,
+void FASIceViscouseTensorOpFactory::define( const ProblemDomain&             a_coarseDomain, 
+					    const RealVect&                  a_crsDx,
 					    const Vector<DisjointBoxLayout>& a_grids,
-					    const Vector<int>&   a_refRatios,
-					    int a_nSRGrids
+					    const Vector<int>&               a_refRatios,
+					    int                              a_nSRGrids            
 					    )
 {
   CH_TIME("FASIceViscouseTensorOpFactory::define");
-  
+
+  m_coarseDomain     =  a_coarseDomain;       
+  m_crsDx            =  a_crsDx       ;       
+  m_grids            =  a_grids       ;         
+  m_refRatios        =  a_refRatios   ;       
+  m_nSRGrids         =  a_nSRGrids    ;          
   // call base implimentation
   AMRFASOpFactory<LevelData<FArrayBox> >::define( a_coarseDomain,
 						  a_crsDx,

@@ -17,6 +17,86 @@
 
 #include "NamespaceHeader.H"
 
+/**
+   ViscouseTensor derived class for FAS operator
+*/
+class FASIceViscouseTensorOp : public AMRLevelOp< LevelData<FArrayBox> >
+{
+
+  //! Constructor.
+  FASIceViscouseTensorOp( int a_o, 
+			  const DisjointBoxLayout    & a_grid,
+                          const RealVect             & a_rvdx,
+			  const ConstitutiveRelation * a_constRelPtr,
+			  const BasalFrictionRelation* a_basalFrictionRelPtr,
+			  IceThicknessIBC            * a_bc
+			  );
+  
+  virtual ~FASIceViscouseTensorOp()
+  {
+    if(m_VTO) delete m_VTO;
+  }
+
+  virtual void restrictState( RefCountedPtr<AMRLevelOp<LevelData<FArrayBox> > >,
+			      Copier &a_copier );
+
+  virtual bool computeState( RefCountedPtr<LevelData<FArrayBox> > a_phi, 
+			     const RefCountedPtr<LevelData<FArrayBox> > a_CrsPhi,
+			     const RefCountedPtr<LevelData<FArrayBox> > a_FinePhi 
+			     );
+
+  virtual void applyLevel( LevelData<FArrayBox>& a_LofPhi,
+			   const LevelData<FArrayBox>& a_phi
+			   );
+
+  virtual void reflux(const LevelData<FArrayBox>&        a_phiFine,
+		      const LevelData<FArrayBox>&        a_phi,
+                      LevelData<FArrayBox>&              a_residual,
+		      AMRLevelOp<LevelData<FArrayBox> >*   a_finerOp );
+
+  virtual void levelGSRB( RefCountedPtr<LevelData<FArrayBox> >       a_phi,
+			  const RefCountedPtr<LevelData<FArrayBox> > a_rhs
+			  );
+  
+  virtual void levelRich( RefCountedPtr<LevelData<FArrayBox> >       a_phi,
+			  const RefCountedPtr<LevelData<FArrayBox> > a_rhs
+			  );
+
+  // compute face-centered coefficients for tensor solver (really
+  // winds up being H*mu) -- non-isothermal version...
+  void computeMu( LevelData<FArrayBox> &a_vel,
+		  const LevelData<FArrayBox>* a_crseVel,
+		  const LevelData<FArrayBox>*
+		  );
+
+  // constant op data
+  DisjointBoxLayout m_grids;
+  RealVect          m_rvdx;
+  const Real m_constThetaVal;
+  const Real m_vtopSafety;
+
+  // passed from solver to factory to op
+  const ConstitutiveRelation*  m_constRelPtr;
+  const BasalFrictionRelation* m_basalFrictionRelPtr;
+
+  // cached in solver
+  Real m_time;
+  RefCountedPtr<LevelSigmaCS> m_coordSys;
+
+  // beta is used to scale C below
+  RefCountedPtr<LevelData<FArrayBox> > m_Beta;     // set in solver from a_beta
+  RefCountedPtr<LevelData<FArrayBox> > m_Beta0;     // set in solver from a_beta0
+  RefCountedPtr<LevelData<FluxBox> >   m_faceA;    // derived in solver from m_A
+  // Viscous tensor operator
+  ViscousTensorOp* m_VTO;
+  IceThicknessIBC* m_bc; // this masks m_bc in base class
+
+  virtual void mult ( LevelData<FArrayBox>&       a_lhs,
+                      const LevelData<FArrayBox>& a_factor) const;
+  
+  virtual void CFInterp( LevelData<FArrayBox>& a_phi,
+			 const LevelData<FArrayBox>& a_phiCoarse);
+};
 ///
 /**
    Factory to create AMR FASIceViscouseTensorOp(s) -- these two classes should be cloned to add operators
@@ -56,87 +136,13 @@ public:
 
   ViscousTensorOpFactory* m_VTOFactory;
   IceThicknessIBC* m_bc; // this masks m_bc in base class
-
-  //const int m_sizeA; // need to get this early to allocate m_A
+  ProblemDomain             m_coarseDomain;
+  RealVect                  m_crsDx;
+  Vector<DisjointBoxLayout> m_grids;
+  Vector<int>               m_refRatios;
+  int                       m_nSRGrids;
 };
 
-/**
-   ViscouseTensor derived class for FAS operator
-*/
-class FASIceViscouseTensorOp : public AMRLevelOp< LevelData<FArrayBox> >
-{
-  friend class FASIceViscouseTensorOpFactory;
-public:
-  //! Constructor.
-  FASIceViscouseTensorOp( int a_o, 
-			  const DisjointBoxLayout &a_grid,
-			  const ConstitutiveRelation*  a_constRelPtr,
-			  const BasalFrictionRelation* a_basalFrictionRelPtr,
-			  IceThicknessIBC* a_bc
-			  );
-  
-  virtual ~FASIceViscouseTensorOp()
-  {
-    if(m_VTO) delete m_VTO;
-  }
-
-  virtual void restrictState( RefCountedPtr<AMRLevelOp<LevelData<FArrayBox> > >,
-			      Copier &a_copier );
-
-  virtual bool computeState( RefCountedPtr<LevelData<FArrayBox> > a_phi, 
-			     const RefCountedPtr<LevelData<FArrayBox> > a_CrsPhi,
-			     const RefCountedPtr<LevelData<FArrayBox> > a_FinePhi 
-			     );
-
-protected:
-  virtual void applyLevel( LevelData<FArrayBox>& a_LofPhi,
-			   const LevelData<FArrayBox>& a_phi
-			   );
-
-  virtual void reflux(const LevelData<FArrayBox>&        a_phiFine,
-		      const LevelData<FArrayBox>&        a_phi,
-                      LevelData<FArrayBox>&              a_residual,
-		      AMRLevelOp<LevelData<FArrayBox> >*   a_finerOp );
-
-  virtual void levelGSRB( RefCountedPtr<LevelData<FArrayBox> >       a_phi,
-			  const RefCountedPtr<LevelData<FArrayBox> > a_rhs
-			  );
-  
-  virtual void levelRich( RefCountedPtr<LevelData<FArrayBox> >       a_phi,
-			  const RefCountedPtr<LevelData<FArrayBox> > a_rhs
-			  );
-
-  // compute face-centered coefficients for tensor solver (really
-  // winds up being H*mu) -- non-isothermal version...
-  void computeMu( LevelData<FArrayBox> &a_vel,
-		  const LevelData<FArrayBox>* a_crseVel,
-		  const LevelData<FArrayBox>*
-		  );
-
-public:  
-  // constant op data
-  const Real m_constThetaVal;
-  const Real m_vtopSafety;
-
-  // passed from solver to factory to op
-  const ConstitutiveRelation*  m_constRelPtr;
-  const BasalFrictionRelation* m_basalFrictionRelPtr;
-
-  // cached in solver
-  Real m_time;
-  RefCountedPtr<LevelSigmaCS> m_coordSys;
-
-  // beta is used to scale C below
-  RefCountedPtr<LevelData<FArrayBox> > m_Beta;     // set in solver from a_beta
-  RefCountedPtr<LevelData<FArrayBox> > m_Beta0;     // set in solver from a_beta0
-  RefCountedPtr<LevelData<FluxBox> >   m_faceA;    // derived in solver from m_A
-  // Viscous tensor operator
-  ViscousTensorOp* m_VTO;
-  IceThicknessIBC* m_bc; // this masks m_bc in base class
-
-  virtual void CFInterp( LevelData<FArrayBox>& a_phi,
-			 const LevelData<FArrayBox>& a_phiCoarse);
-};
 
 /// virtual class to manage the nonlinear solve for the ice-sheet
 /// momentum 
