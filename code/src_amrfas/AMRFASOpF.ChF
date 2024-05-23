@@ -271,7 +271,7 @@ c     bref is a box that will go from (0,0,0) to (refRatio-1)*(1,1,1)
             CHF_ENDDO
          enddo                  ! var
       else
-         print *, 'what are we doing here????'
+
          do var = 0, CHF_NCOMP[fine] - 1
             CHF_AUTOMULTIDO[box;ic]
             CHF_DTERM[
