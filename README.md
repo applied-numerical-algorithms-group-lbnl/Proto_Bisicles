@@ -10,8 +10,8 @@ well-identified locations.
 * BISICLES has a very nice system for version control that uses svn and python.
 * This system has been taken out of this repository since I did not want to reprogram it for git.
 * The fortran-based FAS solver in BISICLES works with AMRFAS, which lives in a separate svn repository.
-* AMRFAS is an early of version of Mark Adams' AMRFASMultiGrid infrastructure (which lives in Chombo).
-* FASIceSolver is therefore being rewritten to use the more recent interface.
+* I include the code from the AMRFAS repository here.
+* The BISICLES make system is a bit odd.   I just use the Chombo one so there  is no mk directory here.
 
 # Changed source files:
 * AmrIce.{H,cpp}
@@ -21,7 +21,7 @@ well-identified locations.
 * Proto_FAS_IceSolver.cpp
 
 # New Directories:
-* code/exec2D/fas_fortran holds fortran-based FAS solver input templates
+* code/exec2D/_fas_fortran holds fortran-based FAS solver input templates
 * code/exec2D/_fas_proto holds proto-based FAS solver input templates
 * code/test_harness will be a Chombo-style test harness for simulation campaigns.
 
