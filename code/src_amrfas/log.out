@@ -1,0 +1,261 @@
+------------------------------------------------------------------------
+r11288 | madams | 2013-04-29 13:27:59 -0700 (Mon, 29 Apr 2013) | 1 line
+
+removed new intperpolation methods.
+------------------------------------------------------------------------
+r11287 | madams | 2013-02-23 10:39:47 -0800 (Sat, 23 Feb 2013) | 2 lines
+
+improving set state methods in op for BISICLES.
+
+------------------------------------------------------------------------
+r11283 | madams | 2013-02-16 13:45:24 -0800 (Sat, 16 Feb 2013) | 2 lines
+
+fixed some sentax errors that were just checked in.
+
+------------------------------------------------------------------------
+r11281 | dmartin | 2013-02-15 20:45:36 -0800 (Fri, 15 Feb 2013) | 3 lines
+
+refactored AMRFAS code to put template instantiations into .cpp files rather than in I.H files (otherwise multiple includes result in multiple definitions at link time)
+
+
+------------------------------------------------------------------------
+r11280 | madams | 2013-02-13 13:46:21 -0800 (Wed, 13 Feb 2013) | 2 lines
+
+tried to remove LAPACK dependacy in BISICLE by moving interop ops to the operator, but failed.  fixed up G-S smoother for Poisson.
+
+------------------------------------------------------------------------
+r11276 | madams | 2013-02-01 11:13:17 -0800 (Fri, 01 Feb 2013) | 2 lines
+
+split poisson op off into separate files. added temp debug stuff.
+
+------------------------------------------------------------------------
+r11275 | madams | 2013-01-28 10:49:01 -0800 (Mon, 28 Jan 2013) | 2 lines
+
+fixed bug with negative indices in prolongation ops.
+
+------------------------------------------------------------------------
+r11274 | madams | 2013-01-23 09:34:52 -0800 (Wed, 23 Jan 2013) | 2 lines
+
+provided hooks for specifying prolongation order.
+
+------------------------------------------------------------------------
+r11272 | madams | 2013-01-20 14:39:50 -0800 (Sun, 20 Jan 2013) | 2 lines
+
+abstracted C-F interpolation to operator.
+
+------------------------------------------------------------------------
+r11271 | madams | 2013-01-14 12:35:08 -0800 (Mon, 14 Jan 2013) | 3 lines
+
+added arfument to ignore inactive grids and cleaned up C-F refluxing.
+
+
+------------------------------------------------------------------------
+r11270 | madams | 2013-01-13 16:30:22 -0800 (Sun, 13 Jan 2013) | 2 lines
+
+sort of have one level of SR working.
+
+------------------------------------------------------------------------
+r11269 | madams | 2013-01-08 13:05:35 -0800 (Tue, 08 Jan 2013) | 3 lines
+
+fixed AMR bug and some SR bugs.
+ 
+
+------------------------------------------------------------------------
+r11266 | ligocki | 2013-01-03 16:47:20 -0800 (Thu, 03 Jan 2013) | 2 lines
+
+Moving everything one level up...
+
+------------------------------------------------------------------------
+r11265 | madams | 2013-01-03 16:01:28 -0800 (Thu, 03 Jan 2013) | 3 lines
+
+updateing for repo move.
+
+
+------------------------------------------------------------------------
+r11264 | madams | 2012-12-31 15:07:22 -0800 (Mon, 31 Dec 2012) | 2 lines
+
+added start of SR design doc, added more SR code, correct version.
+
+------------------------------------------------------------------------
+r11256 | madams | 2012-12-22 07:12:54 -0800 (Sat, 22 Dec 2012) | 2 lines
+
+added segmental refinement solver to AMRFAS and an SR driver. 
+
+------------------------------------------------------------------------
+r11245 | madams | 2012-12-17 18:25:07 -0800 (Mon, 17 Dec 2012) | 2 lines
+
+fixed bug with 4th order.
+
+------------------------------------------------------------------------
+r11239 | madams | 2012-12-14 08:43:45 -0800 (Fri, 14 Dec 2012) | 2 lines
+
+small refactoring.
+
+------------------------------------------------------------------------
+r11235 | madams | 2012-12-12 17:39:38 -0800 (Wed, 12 Dec 2012) | 2 lines
+
+bug fix, more refactorin, well verified version.
+
+------------------------------------------------------------------------
+r11232 | madams | 2012-12-10 18:51:17 -0800 (Mon, 10 Dec 2012) | 2 lines
+
+fixed for BISICLES.
+
+------------------------------------------------------------------------
+r11228 | madams | 2012-12-10 00:00:16 -0800 (Mon, 10 Dec 2012) | 2 lines
+
+more cleaning up.
+
+------------------------------------------------------------------------
+r11216 | madams | 2012-12-05 11:08:07 -0800 (Wed, 05 Dec 2012) | 2 lines
+
+cleaning up warning messages.
+
+------------------------------------------------------------------------
+r11215 | madams | 2012-12-05 07:33:04 -0800 (Wed, 05 Dec 2012) | 2 lines
+
+fixed some defines.
+
+------------------------------------------------------------------------
+r11204 | madams | 2012-12-04 12:55:32 -0800 (Tue, 04 Dec 2012) | 2 lines
+
+some cleaning up wrt BICICLES.
+
+------------------------------------------------------------------------
+r11181 | madams | 2012-11-28 15:48:38 -0800 (Wed, 28 Nov 2012) | 2 lines
+
+some clean up.
+
+------------------------------------------------------------------------
+r11179 | madams | 2012-11-28 13:56:44 -0800 (Wed, 28 Nov 2012) | 2 lines
+
+refactoring.
+
+------------------------------------------------------------------------
+r11162 | madams | 2012-11-20 11:52:24 -0800 (Tue, 20 Nov 2012) | 2 lines
+
+more refactoring.
+
+------------------------------------------------------------------------
+r11161 | madams | 2012-11-20 07:09:44 -0800 (Tue, 20 Nov 2012) | 2 lines
+
+refactored AMRFAS.
+
+------------------------------------------------------------------------
+r11139 | madams | 2012-11-13 13:06:43 -0800 (Tue, 13 Nov 2012) | 2 lines
+
+fixed matrix prolongation, stable version: 2 & 3D, AMR, 2nd and 4th order.
+
+------------------------------------------------------------------------
+r11134 | madams | 2012-11-12 12:47:38 -0800 (Mon, 12 Nov 2012) | 2 lines
+
+AMR working but have a bug.
+
+------------------------------------------------------------------------
+r11127 | madams | 2012-11-08 17:03:35 -0800 (Thu, 08 Nov 2012) | 2 lines
+
+setup AMR test.  Stable but not getting 4th order convergence with BCs.
+
+------------------------------------------------------------------------
+r11116 | madams | 2012-10-31 15:44:53 -0700 (Wed, 31 Oct 2012) | 2 lines
+
+added high order C-F interp methods.
+
+------------------------------------------------------------------------
+r11106 | madams | 2012-10-23 19:04:44 -0700 (Tue, 23 Oct 2012) | 2 lines
+
+a bug fix and some cleanup.
+
+------------------------------------------------------------------------
+r11104 | madams | 2012-10-22 17:30:18 -0700 (Mon, 22 Oct 2012) | 2 lines
+
+addes support for MG coarsening of 4 for internal grids, added quartic prolongation with refinement ratio of 4.
+
+------------------------------------------------------------------------
+r11100 | madams | 2012-10-20 17:39:45 -0700 (Sat, 20 Oct 2012) | 2 lines
+
+added quartic poly for FMG prolongation, for 4th order, now passes convergence test.
+
+------------------------------------------------------------------------
+r11087 | madams | 2012-10-12 16:33:08 -0700 (Fri, 12 Oct 2012) | 2 lines
+
+added test for high order, added high order code.
+
+------------------------------------------------------------------------
+r11073 | madams | 2012-09-28 13:44:27 -0700 (Fri, 28 Sep 2012) | 3 lines
+
+finished detailing FAS solver.  Added damped Richardson smoother. Performs like old AMFMG solver with V-cycles (has FMG, recommended).  Not getting proper FMG convergence with AMR, C-F interp needs work.
+
+
+------------------------------------------------------------------------
+r11066 | madams | 2012-09-21 11:53:26 -0700 (Fri, 21 Sep 2012) | 2 lines
+
+added internal coarse grid creation.
+
+------------------------------------------------------------------------
+r11065 | madams | 2012-09-20 09:00:29 -0700 (Thu, 20 Sep 2012) | 2 lines
+
+added beginings of coarse grid creation.
+
+------------------------------------------------------------------------
+r11064 | madams | 2012-09-20 07:02:51 -0700 (Thu, 20 Sep 2012) | 2 lines
+
+working like old solver in v-cycles.
+
+------------------------------------------------------------------------
+r11052 | madams | 2012-09-18 07:31:31 -0700 (Tue, 18 Sep 2012) | 2 lines
+
+small clean up.
+
+------------------------------------------------------------------------
+r11049 | madams | 2012-09-17 14:10:48 -0700 (Mon, 17 Sep 2012) | 2 lines
+
+new AMR MG solver is sort of working.
+
+------------------------------------------------------------------------
+r11041 | madams | 2012-09-13 15:54:42 -0700 (Thu, 13 Sep 2012) | 3 lines
+
+cleaned up the code a bit.  It now seems to work exactly like the old FAS AMR solver and the design fits Phil's initial design and the result of a discussion with Brian.  Except I have not put the FAS residual in a function, it is kind of a mess and I can do this later.
+
+
+------------------------------------------------------------------------
+r11031 | madams | 2012-09-05 16:14:47 -0700 (Wed, 05 Sep 2012) | 2 lines
+
+compiling.
+
+------------------------------------------------------------------------
+r11030 | madams | 2012-09-05 14:53:37 -0700 (Wed, 05 Sep 2012) | 2 lines
+
+getting closer to compiling.
+
+------------------------------------------------------------------------
+r11029 | madams | 2012-09-05 10:38:38 -0700 (Wed, 05 Sep 2012) | 2 lines
+
+almost building, some wierd error, going to try another machine.
+
+------------------------------------------------------------------------
+r11028 | madams | 2012-09-04 16:21:59 -0700 (Tue, 04 Sep 2012) | 2 lines
+
+have what looks like all the code in place for new FASMG solve w/o AMR.  Not compiling.
+
+------------------------------------------------------------------------
+r11024 | madams | 2012-09-04 10:39:29 -0700 (Tue, 04 Sep 2012) | 2 lines
+
+interum version.
+
+------------------------------------------------------------------------
+r11013 | colella | 2012-08-21 17:13:59 -0700 (Tue, 21 Aug 2012) | 2 lines
+
+More straw prposal for header.
+
+------------------------------------------------------------------------
+r11012 | colella | 2012-08-21 15:22:58 -0700 (Tue, 21 Aug 2012) | 2 lines
+
+ More header file stuff.
+
+------------------------------------------------------------------------
+r11011 | colella | 2012-08-21 14:35:23 -0700 (Tue, 21 Aug 2012) | 2 lines
+
+Initial commit of AMR FAS discussion.
+
+------------------------------------------------------------------------

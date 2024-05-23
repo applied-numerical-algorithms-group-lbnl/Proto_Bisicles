@@ -151,7 +151,6 @@ FASIceViscouseTensorOp::levelRich( RefCountedPtr<LevelData<FArrayBox> > a_phi,
     m_VTO->axby( *a_phi, *a_phi, tmp, 1.0, omega ); // X = X + omega D^-1 (b - Ax) 
   }
 }
-
 // ---------------------------------------------------------
 void 
 FASIceViscouseTensorOp::restrictState( RefCountedPtr<AMRLevelOp<LevelData<FArrayBox> > > a_fOp, // fine op
@@ -201,6 +200,7 @@ FASIceViscouseTensorOp::restrictState( RefCountedPtr<AMRLevelOp<LevelData<FArray
     DisjointBoxLayout dblCoarsenedFine;
     coarsen( dblCoarsenedFine, f_beta.disjointBoxLayout(), nRef );
     crs_beta.define( dblCoarsenedFine, f_beta.nComp(), f_beta.ghostVect() );
+
     fop->AMRRestrict( c_beta, f_beta, crs_beta, a_copier );
     fop->AMRRestrict( c_beta0, f_beta0, crs_beta, a_copier );
   }

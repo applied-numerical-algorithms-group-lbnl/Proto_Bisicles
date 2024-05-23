@@ -2078,8 +2078,6 @@ void AmrIce::writeMetaDataHDF5(HDF5Handle& a_handle) const
   headerData.m_int["current_step"] = m_cur_step; 
   headerData.m_real["time"] = time();
   headerData.m_real["dt"] = m_dt;
-#if 0
-  //really?
   headerData.m_string["svn_version"] = SVN_REV;
   headerData.m_string["svn_repository"] = SVN_REP;
   headerData.m_string["svn_url"] = SVN_URL;
@@ -2093,7 +2091,6 @@ void AmrIce::writeMetaDataHDF5(HDF5Handle& a_handle) const
 #else
   headerData.m_int["chombo_patch_number"] = CHOMBO_PATCH_NUMBER;
 #endif
-#endif  
   headerData.m_real["density_of_ice"] = m_iceDensity;
   headerData.m_real["seconds_per_unit_time"] = m_seconds_per_unit_time;
 

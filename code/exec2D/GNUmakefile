@@ -1,38 +1,18 @@
-# -*- Mode: Makefile -*- 
 
-### This makefile produces an executable for each 
-### name in the `ebase' variable
-ebase := driver
+ebase = driver
 
-#all:  libBisicles2d.Linux.64.g++.gfortran.DEBUG.a libbike 
-#driver:  libBisicles2d.Linux.64.g++.gfortran.DEBUG.a libbike 
-all: clean libbike driver
-driver: clean libbike
+# the location of the Chombo "lib" directory
+CHOMBO_HOME = ../../../Chombo/lib
 
-.NOTPARALLEL: all
+# names of Chombo libraries needed by this program, in order of search.
+LibNames = EBAMRTimeDependent EBAMRElliptic  EBAMRTools Workshop EBTools AMRTimeDependent AMRElliptic AMRTools BoxTools
 
-include ../mk/Make.defs
+# the locations of the source code directories
+base_dir = .
+src_dirs = ../src ../src_amrfas
 
+# input file for 'run' target
+INPUT = fas.inputs
 
-tttt: tttt.txt
-	echo "a" > tttt.txt
-
-reallyclean: realclean libclean
-
-libbike: 
-	cd ../lib; $(MAKE) lib
-
-libclean:
-	cd ../lib; $(MAKE) realclean
-
-LIBFLAGS := -L../lib/ -lBisicles$(config)  $(LIBFLAGS)
-
-driver: clean libbike ../lib/libBisicles$(config).a 
-
-alltest: libbike ../lib/libBisicles$(config).a 
-
-
-
-.PHONY: all lib libbike libclean alltest
-
+include $(CHOMBO_HOME)/mk/Make.example
 

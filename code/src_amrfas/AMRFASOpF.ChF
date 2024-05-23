@@ -1,0 +1,1718 @@
+C      _______              __
+C     / ___/ /  ___  __ _  / /  ___
+C    / /__/ _ \/ _ \/  V \/ _ \/ _ \
+C    \___/_//_/\___/_/_/_/_.__/\___/
+C    Please refer to Copyright.txt, in Chombo's root directory.
+
+#include "CONSTANTS.H"
+
+      subroutine GSRBHELMHOLTZ_FAS(
+     &     CHF_FRA[phi],
+     &     CHF_CONST_FRA[rhs],
+     &     CHF_BOX[region],
+     &     CHF_CONST_REAL[dx],
+     &     CHF_CONST_REAL[alpha],
+     &     CHF_CONST_REAL[beta],
+     &     CHF_CONST_INT[redBlack],
+     &     CHF_CONST_REAL[omega] )
+
+      REAL_T lambda, dxinv, sum_b, lphi, helmop
+      integer CHF_DDECL[i;j;k]
+      integer n,ncomp,idir,indtot,imin,imax
+
+      dxinv = one/(dx*dx)
+
+      sum_b = 0.0
+      do idir = 0, CH_SPACEDIM-1
+         sum_b = sum_b + two*dxinv
+      enddo
+
+      lambda = -omega/(alpha - beta*sum_b)
+
+      ncomp = CHF_NCOMP[phi]
+      if(ncomp .ne. CHF_NCOMP[rhs]) then
+C         print*, 'GSRBLEVELHELM:phi and rhs incompatible'
+         call MAYDAYERROR()
+      endif
+
+      do n = 0, ncomp - 1
+#if CH_SPACEDIM==3
+        do k=CHF_LBOUND[region; 2], CHF_UBOUND[region; 2]
+#endif
+#if CH_SPACEDIM > 1
+          do j=CHF_LBOUND[region; 1], CHF_UBOUND[region; 1]
+#endif
+            imin = CHF_LBOUND[region; 0]
+            CHF_DTERM[indtot = imin; + j ; + k ]
+C     add 0 or 1 to imin, so that imin+j+k has same parity as redBlack
+C     petermc, 26 april 2001
+            imin = imin + abs(mod(indtot + redBlack, 2))
+            imax = CHF_UBOUND[region; 0]
+            do i = imin, imax, 2
+
+              CHF_DTERM[
+              lphi =   (phi(CHF_IX[i+1;j;k],n)
+     &             +    phi(CHF_IX[i-1;j;k],n);
+     &             +    phi(CHF_IX[i;j+1;k],n)
+     &             +    phi(CHF_IX[i;j-1;k],n);
+     &             +    phi(CHF_IX[i;j;k+1],n)
+     &             +    phi(CHF_IX[i;j;k-1],n)]
+     &             -two*CH_SPACEDIM*phi(CHF_IX[i;j;k],n))*dxinv
+
+              helmop = alpha*phi(CHF_IX[i;j;k],n) + beta*lphi
+
+              phi(CHF_IX[i;j;k],n) = phi(CHF_IX[i;j;k],n) +
+     &             lambda*(helmop - rhs(CHF_IX[i;j;k],n))
+
+            enddo
+#if CH_SPACEDIM > 1
+          enddo
+#endif
+#if CH_SPACEDIM==3
+        enddo
+#endif
+      enddo
+
+      return
+      end
+C
+C
+C
+      subroutine GSRBLAPLACIAN_FAS(
+     &     CHF_FRA[phi],
+     &     CHF_CONST_FRA[rhs],
+     &     CHF_BOX[region],
+     &     CHF_CONST_REAL[dx],
+     &     CHF_CONST_INT[redBlack],
+     &     CHF_CONST_REAL[omega]
+     $     )
+
+      REAL_T lambda, dxinv, lphi, lap
+      integer CHF_DDECL[i;j;k]
+      integer n,ncomp,idir,indtot,imin,imax
+
+      dxinv = one/(dx*dx)
+
+      lambda = omega/(two*dxinv*CH_SPACEDIM)
+      
+      ncomp = CHF_NCOMP[phi]
+      if(ncomp .ne. CHF_NCOMP[rhs]) then
+C         print*, 'GSRBLEVELHELM:phi and rhs incompatible'
+         call MAYDAYERROR()
+      endif
+
+      do n = 0, ncomp - 1
+#if CH_SPACEDIM==3
+        do k=CHF_LBOUND[region; 2], CHF_UBOUND[region; 2]
+#endif
+#if CH_SPACEDIM > 1
+          do j=CHF_LBOUND[region; 1], CHF_UBOUND[region; 1]
+#endif
+            imin = CHF_LBOUND[region; 0]
+            CHF_DTERM[indtot = imin; + j ; + k ]
+C     add 0 or 1 to imin, so that imin+j+k has same parity as redBlack
+C     petermc, 26 april 2001
+            imin = imin + abs(mod(indtot + redBlack, 2))
+            imax = CHF_UBOUND[region; 0]
+            do i = imin, imax, 2
+
+!     no diag
+               lphi = ( CHF_DTERM[
+     &                   phi(CHF_IX[i+1;j;k],n)
+     &              +    phi(CHF_IX[i-1;j;k],n);
+     &              +    phi(CHF_IX[i;j+1;k],n)
+     &              +    phi(CHF_IX[i;j-1;k],n);
+     &              +    phi(CHF_IX[i;j;k+1],n)
+     &              +    phi(CHF_IX[i;j;k-1],n)]
+     &              ) * dxinv
+
+               phi(CHF_IX[i;j;k],n) = (one-omega)*phi(CHF_IX[i;j;k],n) +
+     $              lambda*(rhs(CHF_IX[i;j;k],n)+lphi)
+            enddo
+#if CH_SPACEDIM > 1
+         enddo
+#endif
+#if CH_SPACEDIM==3
+        enddo
+#endif
+      enddo
+
+      return
+      end
+
+C     -----------------------------------------------------------------
+C     subroutine average_SR0
+C     computes restriction of phi to first slot in coarse cover
+C        cover[0] = I[h->2h] (phi[h])
+C     INPUTS/OUTPUTS:
+C     res       <=  coarse[2h]
+C     rhs       =>  fine[h]
+C     box       =>  coarse box into which we add
+C     refRatio  =>  
+C     bref
+C     
+C     Warning: - special version that puts R(u) in 1st slot of cover
+C
+C     mfa Jan 2013
+C     ------------------------------------------------------------------
+
+      subroutine average_SR0(
+     &     CHF_FRA[coarse],
+     &     CHF_CONST_FRA[fine],
+     &     CHF_BOX[box],
+     &     CHF_CONST_INT[refRatio],
+     &     CHF_BOX[bref])
+
+      integer var
+      integer CHF_AUTODECL[ic]
+      integer CHF_AUTODECL[ip]
+      integer CHF_AUTODECL[ii]
+
+      real_t refScale,coarseSum
+
+c     bref is a box that will go from (0,0,0) to (refRatio-1)*(1,1,1)
+
+      refScale = one / (refRatio**CH_SPACEDIM)
+
+      if (refRatio .eq. 2) then
+         do var = 0, CHF_NCOMP[fine] - 1 ! not coarse.ncomp
+            CHF_AUTOMULTIDO[box;ic]
+            CHF_DTERM[
+            ip0 = 2*ic0;
+            ip1 = 2*ic1;
+            ip2 = 2*ic2]
+
+            coarse(CHF_AUTOIX[ic],var) = refScale *
+     &           (CHF_DTERM[
+     &           fine(CHF_AUTOIX[ip],var)
+     &           + fine(CHF_IX[ip0+1;ip1  ;ip2  ],var);
+     &           + fine(CHF_IX[ip0  ;ip1+1;ip2  ],var)
+     &           + fine(CHF_IX[ip0+1;ip1+1;ip2  ],var);
+     &           + fine(CHF_IX[ip0  ;ip1  ;ip2+1],var)
+     &           + fine(CHF_IX[ip0+1;ip1  ;ip2+1],var)
+     &           + fine(CHF_IX[ip0  ;ip1+1;ip2+1],var)
+     &           + fine(CHF_IX[ip0+1;ip1+1;ip2+1],var) ])
+            CHF_ENDDO
+         enddo
+      else if (refRatio .eq. 4) then
+         do var = 0, CHF_NCOMP[fine] - 1
+            CHF_AUTOMULTIDO[box; ic]
+            CHF_DTERM[
+            ip0 = 4*ic0;
+            ip1 = 4*ic1;
+            ip2 = 4*ic2]
+            
+            coarse(CHF_AUTOIX[ic],var) = refScale *
+     &           (CHF_DTERM[
+     &           fine(CHF_IX[ip0  ;ip1  ;ip2  ],var)
+     &           + fine(CHF_IX[ip0+1;ip1  ;ip2  ],var)
+     &           + fine(CHF_IX[ip0+2;ip1  ;ip2  ],var)
+     &           + fine(CHF_IX[ip0+3;ip1  ;ip2  ],var) ;
+     &           + fine(CHF_IX[ip0  ;ip1+1;ip2  ],var)
+     &           + fine(CHF_IX[ip0+1;ip1+1;ip2  ],var)
+     &           + fine(CHF_IX[ip0+2;ip1+1;ip2  ],var)
+     &           + fine(CHF_IX[ip0+3;ip1+1;ip2  ],var)
+     &           + fine(CHF_IX[ip0  ;ip1+2;ip2  ],var)
+     &           + fine(CHF_IX[ip0+1;ip1+2;ip2  ],var)
+     &           + fine(CHF_IX[ip0+2;ip1+2;ip2  ],var)
+     &           + fine(CHF_IX[ip0+3;ip1+2;ip2  ],var)
+     &           + fine(CHF_IX[ip0  ;ip1+3;ip2  ],var)
+     &           + fine(CHF_IX[ip0+1;ip1+3;ip2  ],var)
+     &           + fine(CHF_IX[ip0+2;ip1+3;ip2  ],var)
+     &           + fine(CHF_IX[ip0+3;ip1+3;ip2  ],var) ;
+     &           + fine(CHF_IX[ip0  ;ip1  ;ip2+1],var)
+     &           + fine(CHF_IX[ip0+1;ip1  ;ip2+1],var)
+     &           + fine(CHF_IX[ip0+2;ip1  ;ip2+1],var)
+     &           + fine(CHF_IX[ip0+3;ip1  ;ip2+1],var)
+     &           + fine(CHF_IX[ip0  ;ip1+1;ip2+1],var)
+     &           + fine(CHF_IX[ip0+1;ip1+1;ip2+1],var)
+     &           + fine(CHF_IX[ip0+2;ip1+1;ip2+1],var)
+     &           + fine(CHF_IX[ip0+3;ip1+1;ip2+1],var)
+     &           + fine(CHF_IX[ip0  ;ip1+2;ip2+1],var)
+     &           + fine(CHF_IX[ip0+1;ip1+2;ip2+1],var)
+     &           + fine(CHF_IX[ip0+2;ip1+2;ip2+1],var)
+     &           + fine(CHF_IX[ip0+3;ip1+2;ip2+1],var)
+     &           + fine(CHF_IX[ip0  ;ip1+3;ip2+1],var)
+     &           + fine(CHF_IX[ip0+1;ip1+3;ip2+1],var)
+     &           + fine(CHF_IX[ip0+2;ip1+3;ip2+1],var)
+     &           + fine(CHF_IX[ip0+3;ip1+3;ip2+1],var)
+     &           + fine(CHF_IX[ip0  ;ip1  ;ip2+2],var)
+     &           + fine(CHF_IX[ip0+1;ip1  ;ip2+2],var)
+     &           + fine(CHF_IX[ip0+2;ip1  ;ip2+2],var)
+     &           + fine(CHF_IX[ip0+3;ip1  ;ip2+2],var)
+     &           + fine(CHF_IX[ip0  ;ip1+1;ip2+2],var)
+     &           + fine(CHF_IX[ip0+1;ip1+1;ip2+2],var)
+     &           + fine(CHF_IX[ip0+2;ip1+1;ip2+2],var)
+     &           + fine(CHF_IX[ip0+3;ip1+1;ip2+2],var)
+     &           + fine(CHF_IX[ip0  ;ip1+2;ip2+2],var)
+     &           + fine(CHF_IX[ip0+1;ip1+2;ip2+2],var)
+     &           + fine(CHF_IX[ip0+2;ip1+2;ip2+2],var)
+     &           + fine(CHF_IX[ip0+3;ip1+2;ip2+2],var)
+     &           + fine(CHF_IX[ip0  ;ip1+3;ip2+2],var)
+     &           + fine(CHF_IX[ip0+1;ip1+3;ip2+2],var)
+     &           + fine(CHF_IX[ip0+2;ip1+3;ip2+2],var)
+     &           + fine(CHF_IX[ip0+3;ip1+3;ip2+2],var)
+     &           + fine(CHF_IX[ip0  ;ip1  ;ip2+3],var)
+     &           + fine(CHF_IX[ip0+1;ip1  ;ip2+3],var)
+     &           + fine(CHF_IX[ip0+2;ip1  ;ip2+3],var)
+     &           + fine(CHF_IX[ip0+3;ip1  ;ip2+3],var)
+     &           + fine(CHF_IX[ip0  ;ip1+1;ip2+3],var)
+     &           + fine(CHF_IX[ip0+1;ip1+1;ip2+3],var)
+     &           + fine(CHF_IX[ip0+2;ip1+1;ip2+3],var)
+     &           + fine(CHF_IX[ip0+3;ip1+1;ip2+3],var)
+     &           + fine(CHF_IX[ip0  ;ip1+2;ip2+3],var)
+     &           + fine(CHF_IX[ip0+1;ip1+2;ip2+3],var)
+     &           + fine(CHF_IX[ip0+2;ip1+2;ip2+3],var)
+     &           + fine(CHF_IX[ip0+3;ip1+2;ip2+3],var)
+     &           + fine(CHF_IX[ip0  ;ip1+3;ip2+3],var)
+     &           + fine(CHF_IX[ip0+1;ip1+3;ip2+3],var)
+     &           + fine(CHF_IX[ip0+2;ip1+3;ip2+3],var)
+     &           + fine(CHF_IX[ip0+3;ip1+3;ip2+3],var) ])
+            CHF_ENDDO
+         enddo                  ! var
+      else
+         print *, 'what are we doing here????'
+         do var = 0, CHF_NCOMP[fine] - 1
+            CHF_AUTOMULTIDO[box;ic]
+            CHF_DTERM[
+            ip0 = ic0*refRatio;
+            ip1 = ic1*refRatio;
+            ip2 = ic2*refRatio;
+            ip3 = ic3*refRatio;
+            ip4 = ic4*refRatio;
+            ip5 = ic5*refRatio]
+
+            coarseSum = zero
+            
+            CHF_AUTOMULTIDO[ bref; ii ]
+              coarseSum = coarseSum + fine( CHF_OFFSETIX[ip;+ii],var)
+            CHF_ENDDO
+
+            coarse(CHF_AUTOIX[ic],var) = coarseSum * refScale
+          CHF_ENDDO
+       enddo
+      endif
+
+      return
+      end
+
+C     -----------------------------------------------------------------
+C     subroutine OPERATORLAP_FAS
+C     computes 5-point operator for the Helmholtz equation
+C
+C     INPUTS/OUTPUTS:
+C     phi       =>  phi
+C     lofphi   <=   laplacian
+C     dx        =>  cell spacing
+C
+C     Warning: phi, lofphi must have the same number
+C     of components and span region.  Phi needs one more cell on
+C     all sides
+C
+C     dtgraves nov 2, 1999
+C     ------------------------------------------------------------------
+      subroutine OPERATORLAP_FAS(
+     &     CHF_FRA[lofphi],
+     &     CHF_CONST_FRA[phi],
+     &     CHF_BOX[region],
+     &     CHF_CONST_REAL[dx],
+     &     CHF_CONST_REAL[alpha],
+     &     CHF_CONST_REAL[beta])
+
+      REAL_T dxinv, lap
+      integer n,ncomp
+      integer CHF_DDECL[i;j;k]
+
+      ncomp = CHF_NCOMP[phi]
+      if(ncomp .ne. CHF_NCOMP[lofphi]) then
+C         print*, 'OPERATORLAP:phi and lofphi incompatible'
+         call MAYDAYERROR()
+      endif
+
+      dxinv = one/(dx*dx)
+      do n = 0, ncomp-1
+        CHF_MULTIDO[region; i; j; k]
+
+          lap = ( CHF_DTERM[ phi(CHF_IX[i+1;j  ;k  ],n)
+     &                     + phi(CHF_IX[i-1;j  ;k  ],n) ;
+     &                     + phi(CHF_IX[i  ;j+1;k  ],n)
+     &                     + phi(CHF_IX[i  ;j-1;k  ],n) ;
+     &                     + phi(CHF_IX[i  ;j  ;k+1],n)
+     &                     + phi(CHF_IX[i  ;j  ;k-1],n) ]
+     &                     -(2*CH_SPACEDIM)*phi(CHF_IX[i;j;k],n) )
+     &       * dxinv
+
+          lofphi(CHF_IX[i;j;k],n) = alpha*phi(CHF_IX[i;j;k],n)+beta*lap
+        CHF_ENDDO
+      enddo
+
+      return
+      end
+C     -----------------------------------------------------------------
+C     subroutine OPERATORLAP_SR1
+C     computes 5-point operator for the Laplacian equation
+C
+C     INPUTS/OUTPUTS:
+C     u_Au[1]   <=   L * u_Au[0]
+C     crs_box   =>   box, sub box of u_Au
+C     u_Au[0]   =>   phi
+C     u_Au_box  =>   total cover box for zeroing out for debugging (not used)
+C     dx        =>   cell spacing
+C     alpha
+C     beta
+C
+C     Warning: special version that puts Au in 2nd slot of lofphi
+C
+C     mfa Jan 2013
+C     ------------------------------------------------------------------
+      subroutine OPERATORLAP_SR1(
+     &     CHF_FRA[u_Au],
+     &     CHF_BOX[crs_box],
+     &     CHF_BOX[u_Au_box],
+     &     CHF_CONST_REAL[dx],
+     &     CHF_CONST_REAL[alpha],
+     &     CHF_CONST_REAL[beta])
+
+      REAL_T dxinv, lap
+      integer n,ncomp
+      integer CHF_DDECL[i;j;k]
+
+      ncomp = CHF_NCOMP[u_Au]/2
+      if( mod(CHF_NCOMP[u_Au],2) .ne. 0) then
+         call MAYDAYERROR()
+      endif
+
+C     zero out u_Au[1] to get the untouched boundaries out of the way
+c$$$      do n = 0, ncomp-1
+c$$$        CHF_MULTIDO[u_Au_box; i; j; k]
+c$$$          u_Au(CHF_IX[i;j;k],ncomp+n) = zero
+c$$$        CHF_ENDDO
+c$$$      enddo
+
+      dxinv = one/(dx*dx)
+      do n = 0, ncomp-1
+        CHF_MULTIDO[crs_box; i; j; k]
+        
+        lap = ( CHF_DTERM[ u_Au(CHF_IX[i+1;j  ;k  ],n)
+     &       + u_Au(CHF_IX[i-1;j  ;k  ],n) ;
+     &       + u_Au(CHF_IX[i  ;j+1;k  ],n)
+     &       + u_Au(CHF_IX[i  ;j-1;k  ],n) ;
+     &       + u_Au(CHF_IX[i  ;j  ;k+1],n)
+     &       + u_Au(CHF_IX[i  ;j  ;k-1],n) ]
+     &       -(2*CH_SPACEDIM)*u_Au(CHF_IX[i;j;k],n) )
+     &       * dxinv
+        
+!     place in second slot
+        u_Au(CHF_IX[i;j;k],ncomp+n) = 
+     $       alpha*u_Au(CHF_IX[i;j;k],n) + beta*lap
+        CHF_ENDDO
+      enddo
+
+      return
+      end
+      
+C     -----------------------------------------------------------------
+C     subroutine RESTRICTRESADD_LAP_SR1
+C     computes restriction of residual to a coarser multgrid level
+C     res[2h] += I[h->2h] (rhs[h] - L(phi[h]))
+C     INPUTS/OUTPUTS:
+C     coarse       <=  coarse[2h]
+C     rhs       =>  rhs[h]
+C     phi       =>  phi[h]
+C     alpha     =>  Coefficient of the identity operator
+C     beta      =>  Coefficient of the laplacian operator
+C     fbox      =>  Box over which phi & res is defined (h)
+C     dx        =>  grid spacing in h
+C     refRatio  =>
+C     bref      =>
+C     
+C     Warning: - special version that puts R(b-Au) in 2nd slot of coarse
+C              - adds to coarse
+C     
+C     bvs  Wed Aug 20, 2003, mfa Jan 2013
+C     ------------------------------------------------------------------
+      subroutine RESTRICTRESADD_LAP_SR1(
+     &     CHF_FRA[coarse],
+     &     CHF_CONST_FRA[phi],
+     &     CHF_CONST_FRA[rhs],
+     &     CHF_CONST_REAL[alpha],
+     &     CHF_CONST_REAL[beta],
+     &     CHF_BOX[fbox],
+     &     CHF_CONST_REAL[dx],
+     &     CHF_CONST_INT[refRatio] )
+
+      real_t refScale,dxinv,lofphi
+      integer n,ncomp
+
+      integer CHF_DDECL[i;j;k]
+      integer CHF_DDECL[ii;jj;kk]
+
+      ncomp = CHF_NCOMP[phi]
+      
+      dxinv = one / (dx*dx)
+      refScale = one / (refRatio**CH_SPACEDIM)
+
+      do n = 0, ncomp-1
+         CHF_MULTIDO[fbox; i; j; k]
+!     ugly way to get the coarse grid cell with negative indices
+         CHF_DTERM[ 
+         ii = (i+1048576)/refRatio - 1048576/refRatio;
+         jj = (j+1048576)/refRatio - 1048576/refRatio;
+         kk = (k+1048576)/refRatio - 1048576/refRatio]
+
+         lofphi = alpha * phi(CHF_IX[i;j;k],n)
+     &        + beta * dxinv *
+     &        (CHF_DTERM[ phi(CHF_IX[i+1;j  ;k  ],n)
+     &        + phi(CHF_IX[i-1;j  ;k  ],n) ;
+     &        + phi(CHF_IX[i  ;j+1;k  ],n)
+     &        + phi(CHF_IX[i  ;j-1;k  ],n) ;
+     &        + phi(CHF_IX[i  ;j  ;k+1],n)
+     &        + phi(CHF_IX[i  ;j  ;k-1],n) ]
+     &        - phi(CHF_IX[i  ;j  ;k  ],n) * 2 * CH_SPACEDIM
+     &        )
+
+!     specail SR version adds residual to 2nd slot
+         coarse(CHF_IX[ii;jj;kk],ncomp+n) = 
+     $        coarse(CHF_IX[ii;jj;kk],ncomp+n) +
+     $        refScale * (rhs(CHF_IX[i;j;k],n) - lofphi) 
+
+         CHF_ENDDO
+
+      enddo
+      
+      return
+      end
+
+
+C-----------------------------------------------------------------
+C     sum valid cells
+C-----------------------------------------------------------------
+      subroutine SR_SUM(
+     &     CHF_CONST_FRA[phi],
+     &     CHF_BOX[fbox],
+     $     CHF_CONST_INT[comp],
+     &     CHF_REAL[sumout] )
+      real_t refScale,dxinv,lofphi
+      integer CHF_DDECL[i;j;k]
+
+      CHF_MULTIDO[fbox; i; j; k]
+      sumout = sumout + phi(CHF_IX[i;j;k],comp)
+      CHF_ENDDO
+
+      return
+      end
+
+C     -----------------------------------------------------------------
+C     subroutine OPERATORLAPRES
+C     computes 5-point residual for the Helmholtz equation
+C
+C     INPUTS/OUTPUTS:
+C     phi       =>  phi
+C     rhs       =>
+C     lofphi   <=   helmholtz residual
+C     dx        =>  cell spacing
+C
+C     Warning: phi, lofphi must have the same number
+C     of components and span region.  Phi needs one more cell on
+C     all sides
+C
+C     bvs, 2007
+C     ------------------------------------------------------------------
+c$$$      subroutine OPERATORLAPRES(
+c$$$     &     CHF_FRA[r],
+c$$$     &     CHF_CONST_FRA[phi],
+c$$$     &     CHF_CONST_FRA[rhs],
+c$$$     &     CHF_BOX[region],
+c$$$     &     CHF_CONST_REAL[dx],
+c$$$     &     CHF_CONST_REAL[alpha],
+c$$$     &     CHF_CONST_REAL[beta])
+c$$$
+c$$$      REAL_T dxinv, lap
+c$$$      integer n,ncomp
+c$$$      integer CHF_DDECL[i;j;k]
+c$$$
+c$$$      ncomp = CHF_NCOMP[phi]
+c$$$      
+c$$$      dxinv = one/(dx*dx)
+c$$$      do n = 0, ncomp-1
+c$$$         CHF_MULTIDO[region; i; j; k]
+c$$$
+c$$$          lap = ( CHF_DTERM[ phi(CHF_IX[i+1;j  ;k  ],n)
+c$$$     &                     + phi(CHF_IX[i-1;j  ;k  ],n) ;
+c$$$     &                     + phi(CHF_IX[i  ;j+1;k  ],n)
+c$$$     &                     + phi(CHF_IX[i  ;j-1;k  ],n) ;
+c$$$     &                     + phi(CHF_IX[i  ;j  ;k+1],n)
+c$$$     &                     + phi(CHF_IX[i  ;j  ;k-1],n) ]
+c$$$     &                     -(2*CH_SPACEDIM)*phi(CHF_IX[i;j;k],n) )
+c$$$     &       * dxinv
+c$$$
+c$$$         r(CHF_IX[i;j;k],n) = -alpha*phi(CHF_IX[i;j;k],n) -beta*lap +
+c$$$     &       rhs(CHF_IX[i;j;k],n)
+c$$$
+c$$$         CHF_ENDDO
+c$$$     
+c$$$      enddo
+c$$$
+c$$$      return
+c$$$      end
+
+C     -----------------------------------------------------------------
+C     subroutine PROLONGCONST
+C     computes simple average prolongation of correction to finer level
+C       phi[h] += I[mh->h](coarse[mh])
+C     INPUTS/OUTPUTS:
+C     refRatio         =>  refinement ratio
+C     rhs       <=  rhs[h]
+C     coarse    =>  coarse[2h]
+C     region    =>  Box over which phi is valid (in h index space)
+C
+C     bvs  Wed Aug 20, 2003
+C     ------------------------------------------------------------------
+      subroutine PROLONGCONST(
+     $     CHF_FRA[phi],
+     $     CHF_CONST_FRA[coarse],
+     $     CHF_BOX[region],
+     $     CHF_CONST_INT[refRatio])
+
+      INTEGER ncomp, n
+      integer CHF_DDECL[i;j;k]
+      integer CHF_DDECL[ii;jj;kk]
+
+      ncomp = CHF_NCOMP[phi]
+      do n = 0, ncomp-1
+         CHF_MULTIDO[region; i; j; k]
+         CHF_DTERM[
+         ii = (i+1048576)/refRatio - 1048576/refRatio;
+         jj = (j+1048576)/refRatio - 1048576/refRatio;
+         kk = (k+1048576)/refRatio - 1048576/refRatio]
+
+         phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     &        coarse(CHF_IX[ii;jj;kk],n)
+         CHF_ENDDO
+      enddo
+
+      return
+      
+      end
+
+C     -----------------------------------------------------------------
+C     subroutine PROLONGLINEAR
+C     computes linear prolongation of correction to finer level
+C       phi[h] += I[rh->h](coarse[rh])
+C     INPUTS/OUTPUTS:
+C     phi             <=   phi
+C     coarse           =>  coarse[rh]
+C     fineBox          =>  box of phi to be prolonged
+C     refRatio                =>  refinement ratio
+C
+C     Qinghai Zhang Aug 10, 2010, mfa Oct 2012
+C     ------------------------------------------------------------------
+      subroutine PROLONGLINEAR(
+     &     CHF_FRA[phi],
+     &     CHF_CONST_FRA[coarse],
+     &     CHF_BOX[fineBox],
+     &     CHF_CONST_INT[refRatio])
+      
+      INTEGER ncomp, n
+      integer CHF_DDECL[i ;j ;k ]
+      integer CHF_DDECL[ic;jc;kc]
+
+      ncomp = CHF_NCOMP[phi]    ! cover could have more dof, but takes from cover[0:nc-1]
+
+      do n = 0, ncomp-1
+         CHF_MULTIDO[fineBox; i; j; k]
+
+         CHF_DTERM[
+         ic = (i+1048576)/refRatio - 1048576/refRatio;
+         jc = (j+1048576)/refRatio - 1048576/refRatio;
+         kc = (k+1048576)/refRatio - 1048576/refRatio]
+
+         phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     &        coarse(CHF_IX[ic;jc;kc],n)
+         CHF_DTERM[
+         if ( ic*refRatio.lt.i ) then
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     &           (coarse(CHF_IX[ic+1;jc;kc],n)
+     &           - coarse(CHF_IX[ic;jc;kc],n))/refRatio*(i+half-ic*refRatio-half*refRatio)
+         else
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     &           (- coarse(CHF_IX[ic-1;jc;kc],n)
+     &           + coarse(CHF_IX[ic;jc;kc],n))/refRatio*(i+half-ic*refRatio-half*refRatio)
+         endif;
+         if ( jc*refRatio.lt.j ) then
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     &           (coarse(CHF_IX[ic;jc+1;kc],n)
+     &           - coarse(CHF_IX[ic;jc;kc],n))/refRatio*(j+half-jc*refRatio-half*refRatio)
+         else
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     &           (- coarse(CHF_IX[ic;jc-1;kc],n)
+     &           + coarse(CHF_IX[ic;jc;kc],n))/refRatio*(j+half-jc*refRatio-half*refRatio)
+         endif;
+         if ( kc*refRatio.lt.k ) then
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     &           (coarse(CHF_IX[ic;jc;kc+1],n)
+     &           - coarse(CHF_IX[ic;jc;kc],n))/refRatio*(k+half-kc*refRatio-half*refRatio)
+         else
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     &           (- coarse(CHF_IX[ic;jc;kc-1],n)
+     &           + coarse(CHF_IX[ic;jc;kc],n))/refRatio*(k+half-kc*refRatio-half*refRatio)
+         endif
+         ]
+          CHF_ENDDO
+       enddo
+       
+       return
+       
+       end
+
+C     -----------------------------------------------------------------
+C     subroutine PROLONGQUAD - not general in r (=2)
+C     computes quadradic prolongation of correction to finer level
+C       phi[h] += I[rh->h](coarse[rh])
+C     Needs two ghosts
+C
+C     INPUTS/OUTPUTS:
+C     phi             <=   phi
+C     coarse           =>  coarse[rh]
+C     fineBox          =>  box of phi to be prolonged
+C
+C     Qinghai Zhang Aug 10, 2010, mfa Oct 2012
+C     ------------------------------------------------------------------
+      subroutine PROLONGQUAD(
+     &     CHF_FRA[phi],
+     &     CHF_CONST_FRA[coarse],
+     &     CHF_BOX[fineBox])
+      
+      INTEGER ncomp, n
+      integer CHF_DDECL[i ;j ;k ]
+      integer CHF_DDECL[ic;jc;kc]
+      REAL_T f1,fn1,fn2,ff1
+      data f1,fn1,fn2,ff1/-0.1796875d0,0.2734375d0,
+     &     -0.0390625d0,-0.0546875d0/
+      
+      ncomp = CHF_NCOMP[phi]
+      do n = 0, ncomp-1
+         CHF_MULTIDO[fineBox; i; j; k]
+         CHF_DTERM[
+         ic = (i+1048576)/2 - 1048576/2;
+         jc = (j+1048576)/2 - 1048576/2;
+         kc = (k+1048576)/2 - 1048576/2]
+
+         phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     &        coarse(CHF_IX[ic;jc;kc],n)
+         CHF_DTERM[
+         if ( ic*2.lt.i ) then  ! right
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           f1*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           fn1*coarse(CHF_IX[ic+1;jc;kc],n) + 
+     $           fn2*coarse(CHF_IX[ic+2;jc;kc],n) +
+     $           ff1*coarse(CHF_IX[ic-1;jc;kc],n)
+         else                   ! left or first cell
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           f1*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           fn1*coarse(CHF_IX[ic-1;jc;kc],n) + 
+     $           fn2*coarse(CHF_IX[ic-2;jc;kc],n) +
+     $           ff1*coarse(CHF_IX[ic+1;jc;kc],n)
+         endif;
+         if ( jc*2.lt.j ) then
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           f1*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           fn1*coarse(CHF_IX[ic;jc+1;kc],n) + 
+     $           fn2*coarse(CHF_IX[ic;jc+2;kc],n) +
+     $           ff1*coarse(CHF_IX[ic;jc-1;kc],n)
+         else
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           f1*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           fn1*coarse(CHF_IX[ic;jc-1;kc],n) + 
+     $           fn2*coarse(CHF_IX[ic;jc-2;kc],n) +
+     $           ff1*coarse(CHF_IX[ic;jc+1;kc],n)
+         endif;
+         if ( kc*2.lt.k ) then
+           phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           f1*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           fn1*coarse(CHF_IX[ic;jc;kc+1],n) + 
+     $           fn2*coarse(CHF_IX[ic;jc;kc+2],n) +
+     $           ff1*coarse(CHF_IX[ic;jc;kc-1],n)
+        else
+           phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           f1*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           fn1*coarse(CHF_IX[ic;jc;kc-1],n) + 
+     $           fn2*coarse(CHF_IX[ic;jc;kc-2],n) +
+     $           ff1*coarse(CHF_IX[ic;jc;kc+1],n)
+        endif
+         ]
+          CHF_ENDDO
+       enddo
+       
+       return
+       
+       end
+
+C     -----------------------------------------------------------------
+C     subroutine PROLONGQUAD_V2
+C     computes quadradic prolongation of correction to finer level
+C       phi[h] += I[rh->h](coarse[rh])
+C     Needs one ghost
+C
+C     INPUTS/OUTPUTS:
+C     phi             <=   phi[h]
+C     coarse           =>  coarse[rh]
+C     fineBox          =>  box of phi to be prolonged
+C     refRatio         =>  refinement ratio
+C
+C     mfa Nov 2012
+C     ------------------------------------------------------------------
+      subroutine PROLONGQUAD_V2(
+     &     CHF_FRA[phi],
+     &     CHF_CONST_FRA[coarse],
+     &     CHF_BOX[fineBox],
+     &     CHF_CONST_INT[refRatio])
+      
+      INTEGER ncomp, n
+      integer CHF_DDECL[i ;j ;k ]
+      integer CHF_DDECL[ic;jc;kc]
+      REAL_T L12,R12,L14,R14,L24,R24,C14,C24
+      data L12,R12/0.125d0,-0.125d0/
+      data L14,R14/0.21875d0,-0.15625d0/
+      data L24,R24/0.03125d0,-0.09375d0/
+      data C14,C24 /-0.0625d0,0.0625d0/
+
+      ncomp = CHF_NCOMP[phi]
+      do n = 0, ncomp-1
+         CHF_MULTIDO[fineBox; i; j; k]
+
+         CHF_DTERM[
+         ic = (i+1048576)/refRatio - 1048576/refRatio;
+         jc = (j+1048576)/refRatio - 1048576/refRatio;
+         kc = (k+1048576)/refRatio - 1048576/refRatio]
+
+         phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     &        coarse(CHF_IX[ic;jc;kc],n)
+
+         if( refRatio == 2 ) then
+            CHF_DTERM[
+            if ( ic*2.lt.i ) then ! right
+               phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $              L12*coarse(CHF_IX[ic+1;jc;kc],n) + 
+     $              R12*coarse(CHF_IX[ic-1;jc;kc],n)
+            else                ! left or first cell
+               phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $              L12*coarse(CHF_IX[ic-1;jc;kc],n) + 
+     $              R12*coarse(CHF_IX[ic+1;jc;kc],n)
+            endif;
+            if ( jc*2.lt.j ) then
+               phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $              L12*coarse(CHF_IX[ic;jc+1;kc],n) + 
+     $              R12*coarse(CHF_IX[ic;jc-1;kc],n)
+            else
+               phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $              L12*coarse(CHF_IX[ic;jc-1;kc],n) + 
+     $              R12*coarse(CHF_IX[ic;jc+1;kc],n)
+            endif;
+            if ( kc*2.lt.k ) then
+               phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $              L12*coarse(CHF_IX[ic;jc;kc+1],n) + 
+     $              R12*coarse(CHF_IX[ic;jc;kc-1],n)
+            else
+               phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $              L12*coarse(CHF_IX[ic;jc;kc-1],n) + 
+     $              R12*coarse(CHF_IX[ic;jc;kc+1],n)
+            endif
+            ]
+          else if( refRatio == 4 ) then
+
+             CHF_DTERM[
+             if ( i - ic*4 .lt. 4/2) then ! left half
+                if( (i-ic*4) == 0 ) then
+                   phi(CHF_IX[i;j;k],n) = phi(CHF_IX[i;j;k],n)
+     $                  + L14*coarse(CHF_IX[ic-1;jc;kc],n)
+     $                  + (C14-1.d0)*coarse(CHF_IX[ic;jc;kc],n)
+     $                  + R14*coarse(CHF_IX[ic+1;jc;kc],n)
+                else
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $                  + L24*coarse(CHF_IX[ic-1;jc;kc],n)
+     $                  + (C24-1.d0)*coarse(CHF_IX[ic;jc;kc],n)
+     $                  + R24*coarse(CHF_IX[ic+1;jc;kc],n)
+                endif
+             else               ! right half
+                if( (i-ic*4) == 2 ) then
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $                  + L24*coarse(CHF_IX[ic+1;jc;kc],n)
+     $                  + (C24-1.d0)*coarse(CHF_IX[ic;jc;kc],n)
+     $                  + R24*coarse(CHF_IX[ic-1;jc;kc],n)
+                else
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $                  + L14*coarse(CHF_IX[ic+1;jc;kc],n)
+     $                  + (C14-1.d0)*coarse(CHF_IX[ic;jc;kc],n)
+     $                  + R14*coarse(CHF_IX[ic-1;jc;kc],n)
+                endif  
+             endif;
+             if ( j - jc*4 .lt. 4/2 ) then
+                if( (j-jc*4) == 0 ) then
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $                  + L14*coarse(CHF_IX[ic;jc-1;kc],n)
+     $                  + (C14-1.d0)*coarse(CHF_IX[ic;jc;kc],n)
+     $                  + R14*coarse(CHF_IX[ic;jc+1;kc],n)
+                else
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $                  + L24*coarse(CHF_IX[ic;jc-1;kc],n)
+     $                  + (C24-1.d0)*coarse(CHF_IX[ic;jc;kc],n)
+     $                  + R24*coarse(CHF_IX[ic;jc+1;kc],n)    
+                endif
+             else
+                if( (j-jc*4) == 2 ) then
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $                  + L24*coarse(CHF_IX[ic;jc+1;kc],n)
+     $                  + (C24-1.d0)*coarse(CHF_IX[ic;jc;kc],n)
+     $                  + R24*coarse(CHF_IX[ic;jc-1;kc],n)
+                else
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $                  + L14*coarse(CHF_IX[ic;jc+1;kc],n)
+     $                  + (C14-1.d0)*coarse(CHF_IX[ic;jc;kc],n)
+     $                  + R14*coarse(CHF_IX[ic;jc-1;kc],n)
+                endif
+             endif;
+             if ( k - kc*4 .lt. 4/2 ) then
+                if( (k-kc*4) == 0 ) then
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $                  + L14*coarse(CHF_IX[ic;jc;kc-1],n)
+     $                  + (C14-1.d0)*coarse(CHF_IX[ic;jc;kc],n)
+     $                  + R14*coarse(CHF_IX[ic;jc;kc+1],n)
+                else
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $                  + L24*coarse(CHF_IX[ic;jc;kc-1],n)
+     $                  + (C24-1.d0)*coarse(CHF_IX[ic;jc;kc],n)
+     $                  + R24*coarse(CHF_IX[ic;jc;kc+1],n)
+                endif
+             else
+                if( (k-kc*4) == 2 ) then
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $                  + L24*coarse(CHF_IX[ic;jc;kc+1],n)
+     $                  + (C24-1.d0)*coarse(CHF_IX[ic;jc;kc],n)
+     $                  + R24*coarse(CHF_IX[ic;jc;kc-1],n)
+                else
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $                  + L14*coarse(CHF_IX[ic;jc;kc+1],n)
+     $                  + (C14-1.d0)*coarse(CHF_IX[ic;jc;kc],n)
+     $                  + R14*coarse(CHF_IX[ic;jc;kc-1],n)
+                endif
+             endif
+            ]
+
+
+          endif
+          CHF_ENDDO
+       enddo
+       
+       return
+       
+       end
+                       
+C     -----------------------------------------------------------------
+C     subroutine PROLONGCUBIC 
+C     computes NODAL BASED cubic prolongation of correction to finer level
+C     needs two ghosts on near side
+C     phi[h] += I[rh->h](coarse[rh])
+C     INPUTS/OUTPUTS:
+C     phi             <=   phi
+C     crs              =>  crs[rh]
+C     fineBox          =>  box of phi to be prolonged
+C     refRatio                =>  refinement ratio, MUST BE 2 OR 4
+C     
+C     mfa Oct 2012
+C     ------------------------------------------------------------------
+      subroutine PROLONGCUBIC(
+     &     CHF_FRA[phi],
+     &     CHF_CONST_FRA[crs],
+     &     CHF_BOX[fineBox],
+     &     CHF_CONST_INT[refRatio])
+      
+      INTEGER ncomp, n
+      integer CHF_DDECL[i ;j ;k ]
+      integer CHF_DDECL[ic;jc;kc]
+      REAL_T L1,L2,L3,L4,xx,R1,R2,R3,R4,S1,S2,S3,S4
+      data L1,L2/-.0390625d0,0.2734375d0/
+      data L3,L4/.8203125d0,-.0546875d0/
+      data R1,R2/-.0537109375d0,0.4189453125d0/
+      data R3,R4/.6982421875,-.0634765625d0/
+      data S1,S2/-.0205078125d0,0.1318359375d0/
+      data S3,S4/.9228515625d0,-.0341796875d0/
+
+      ncomp = CHF_NCOMP[phi]
+      do n = 0, ncomp-1
+         CHF_MULTIDO[fineBox; i; j; k]
+
+         CHF_DTERM[
+         ic = (i+1048576)/refRatio - 1048576/refRatio;
+         jc = (j+1048576)/refRatio - 1048576/refRatio;
+         kc = (k+1048576)/refRatio - 1048576/refRatio]
+
+         phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $        crs(CHF_IX[ic;jc;kc],n)
+         if( refRatio == 2 ) then
+            CHF_DTERM[
+            if ( i - ic*refRatio .lt. refRatio/2) then ! left half
+               phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $              + L1*crs(CHF_IX[ic-2;jc;kc],n) 
+     $              + L2*crs(CHF_IX[ic-1;jc;kc],n)
+     $              + (L3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $              + L4*crs(CHF_IX[ic+1;jc;kc],n)
+            else                ! right half
+               phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $              + L1*crs(CHF_IX[ic+2;jc;kc],n) 
+     $              + L2*crs(CHF_IX[ic+1;jc;kc],n)
+     $              + (L3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $              + L4*crs(CHF_IX[ic-1;jc;kc],n)
+            endif;
+            if ( j - jc*refRatio .lt. refRatio/2 ) then
+               phi(CHF_IX[i;j;k],n) = phi(CHF_IX[i;j;k],n) 
+     $              + L1*crs(CHF_IX[ic;jc-2;kc],n) 
+     $              + L2*crs(CHF_IX[ic;jc-1;kc],n)
+     $              + (L3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $              + L4*crs(CHF_IX[ic;jc+1;kc],n)
+            else
+               phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $              + L1*crs(CHF_IX[ic;jc+2;kc],n) 
+     $              + L2*crs(CHF_IX[ic;jc+1;kc],n)
+     $              + (L3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $              + L4*crs(CHF_IX[ic;jc-1;kc],n)
+            endif;
+            if ( k - kc*refRatio .lt. refRatio/2 ) then
+               phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $              + L1*crs(CHF_IX[ic;jc;kc-2],n) 
+     $              + L2*crs(CHF_IX[ic;jc;kc-1],n)
+     $              + (L3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $              + L4*crs(CHF_IX[ic;jc;kc+1],n)
+            else
+               phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $              + L1*crs(CHF_IX[ic;jc;kc+2],n) 
+     $              + L2*crs(CHF_IX[ic;jc;kc+1],n)
+     $              + (L3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $              + L4*crs(CHF_IX[ic;jc;kc-1],n)
+            endif
+            ]
+          else                  ! r == 4
+             CHF_DTERM[
+             if ( i - ic*refRatio .lt. refRatio/2) then ! left half
+                if( (i-ic*refRatio) == 0 ) then
+                   phi(CHF_IX[i;j;k],n) = phi(CHF_IX[i;j;k],n)
+     $                  + R1*crs(CHF_IX[ic-2;jc;kc],n) 
+     $                  + R2*crs(CHF_IX[ic-1;jc;kc],n)
+     $                  + (R3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $                  + R4*crs(CHF_IX[ic+1;jc;kc],n)
+                else
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $                  + S1*crs(CHF_IX[ic-2;jc;kc],n)
+     $                  + S2*crs(CHF_IX[ic-1;jc;kc],n)
+     $                  + (S3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $                  + S4*crs(CHF_IX[ic+1;jc;kc],n)
+                endif
+             else               ! right half
+                if( (i-ic*refRatio) == 2 ) then
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $                  + S1*crs(CHF_IX[ic+2;jc;kc],n) 
+     $                  + S2*crs(CHF_IX[ic+1;jc;kc],n)
+     $                  + (S3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $                  + S4*crs(CHF_IX[ic-1;jc;kc],n)
+                else
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $                  + R1*crs(CHF_IX[ic+2;jc;kc],n) 
+     $                  + R2*crs(CHF_IX[ic+1;jc;kc],n)
+     $                  + (R3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $                  + R4*crs(CHF_IX[ic-1;jc;kc],n)
+                endif  
+             endif;
+             if ( j - jc*refRatio .lt. refRatio/2 ) then
+                if( (j-jc*refRatio) == 0 ) then
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $                  + R1*crs(CHF_IX[ic;jc-2;kc],n) 
+     $                  + R2*crs(CHF_IX[ic;jc-1;kc],n)
+     $                  + (R3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $                  + R4*crs(CHF_IX[ic;jc+1;kc],n)
+                else
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $                  + S1*crs(CHF_IX[ic;jc-2;kc],n) 
+     $                  + S2*crs(CHF_IX[ic;jc-1;kc],n)
+     $                  + (S3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $                  + S4*crs(CHF_IX[ic;jc+1;kc],n)    
+                endif
+             else
+                if( (j-jc*refRatio) == 2 ) then
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $                  + S1*crs(CHF_IX[ic;jc+2;kc],n) 
+     $                  + S2*crs(CHF_IX[ic;jc+1;kc],n)
+     $                  + (S3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $                  + S4*crs(CHF_IX[ic;jc-1;kc],n)
+                else
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) 
+     $                  + R1*crs(CHF_IX[ic;jc+2;kc],n) 
+     $                  + R2*crs(CHF_IX[ic;jc+1;kc],n)
+     $                  + (R3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $                  + R4*crs(CHF_IX[ic;jc-1;kc],n)
+                endif
+             endif;
+             if ( k - kc*refRatio .lt. refRatio/2 ) then
+                if( (k-kc*refRatio) == 0 ) then
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $                  + R1*crs(CHF_IX[ic;jc;kc-2],n) 
+     $                  + R2*crs(CHF_IX[ic;jc;kc-1],n)
+     $                  + (R3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $                  + R4*crs(CHF_IX[ic;jc;kc+1],n)
+                else
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $                  + S1*crs(CHF_IX[ic;jc;kc-2],n) 
+     $                  + S2*crs(CHF_IX[ic;jc;kc-1],n)
+     $                  + (S3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $                  + S4*crs(CHF_IX[ic;jc;kc+1],n)
+                endif
+             else
+                if( (k-kc*refRatio) == 2 ) then
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $                  + S1*crs(CHF_IX[ic;jc;kc+2],n) 
+     $                  + S2*crs(CHF_IX[ic;jc;kc+1],n)
+     $                  + (S3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $                  + S4*crs(CHF_IX[ic;jc;kc-1],n)
+                else
+                   phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n)
+     $                  + R1*crs(CHF_IX[ic;jc;kc+2],n) 
+     $                  + R2*crs(CHF_IX[ic;jc;kc+1],n)
+     $                  + (R3-1.d0)*crs(CHF_IX[ic;jc;kc],n)
+     $                  + R4*crs(CHF_IX[ic;jc;kc-1],n)
+                endif
+             endif
+            ]
+          endif
+          CHF_ENDDO
+       enddo
+       
+       return
+       
+       end
+      
+C     -----------------------------------------------------------------
+C     subroutine PROLONGQUARTIC_R2 
+C     computes quartic prolongation of correction to finer level, ref ratio 2
+C     needs two ghosts
+C     phi[h] += I[rh->h](coarse[rh])
+C     INPUTS/OUTPUTS:
+C     phi             <=   phi
+C     coarse           =>  coarse[rh]
+C     fineBox          =>  box of phi to be prolonged
+C     
+C     mfa Oct 2012
+C     ------------------------------------------------------------------
+      subroutine PROLONGQUARTIC_R2(
+     $     CHF_FRA[phi],
+     $     CHF_CONST_FRA[coarse],
+     $     CHF_BOX[fineBox])
+      
+      INTEGER ncomp, n, refRatio
+      integer CHF_DDECL[i ;j ;k ]
+      integer CHF_DDECL[ic;jc;kc]
+      REAL_T L1,L2,L4,L5
+      data L1,L2/-0.0234375d0,0.1718750d0/
+      data L4,L5/-0.1718750d0,0.0234375d0/
+      data refRatio/2/
+
+      ncomp = CHF_NCOMP[phi]
+      do n = 0, ncomp-1
+         CHF_MULTIDO[fineBox; i; j; k]
+
+         CHF_DTERM[
+         ic = (i+1048576)/refRatio - 1048576/refRatio;
+         jc = (j+1048576)/refRatio - 1048576/refRatio;
+         kc = (k+1048576)/refRatio - 1048576/refRatio]
+         
+         phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     &        coarse(CHF_IX[ic;jc;kc],n)
+         CHF_DTERM[
+         if ( i-ic*refRatio == 0 ) then ! left half
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           L1*coarse(CHF_IX[ic-2;jc;kc],n) + 
+     $           L2*coarse(CHF_IX[ic-1;jc;kc],n) + 
+     $           L4*coarse(CHF_IX[ic+1;jc;kc],n) +
+     $           L5*coarse(CHF_IX[ic+2;jc;kc],n)
+         else                   ! right celll
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           L5*coarse(CHF_IX[ic-2;jc;kc],n) + 
+     $           L4*coarse(CHF_IX[ic-1;jc;kc],n) + 
+     $           L2*coarse(CHF_IX[ic+1;jc;kc],n) +
+     $           L1*coarse(CHF_IX[ic+2;jc;kc],n)
+         endif;
+         if ( j-jc*refRatio == 0 ) then ! left half
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           L1*coarse(CHF_IX[ic;jc-2;kc],n) + 
+     $           L2*coarse(CHF_IX[ic;jc-1;kc],n) + 
+     $           L4*coarse(CHF_IX[ic;jc+1;kc],n) +
+     $           L5*coarse(CHF_IX[ic;jc+2;kc],n)
+         else                   ! right celll
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           L5*coarse(CHF_IX[ic;jc-2;kc],n) + 
+     $           L4*coarse(CHF_IX[ic;jc-1;kc],n) + 
+     $           L2*coarse(CHF_IX[ic;jc+1;kc],n) +
+     $           L1*coarse(CHF_IX[ic;jc+2;kc],n)
+         endif;
+         if ( k-kc*refRatio == 0 ) then ! left half
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           L1*coarse(CHF_IX[ic;jc;kc-2],n) + 
+     $           L2*coarse(CHF_IX[ic;jc;kc-1],n) + 
+     $           L4*coarse(CHF_IX[ic;jc;kc+1],n) +
+     $           L5*coarse(CHF_IX[ic;jc;kc+2],n)
+         else                   ! right celll
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           L5*coarse(CHF_IX[ic;jc;kc-2],n) + 
+     $           L4*coarse(CHF_IX[ic;jc;kc-1],n) + 
+     $           L2*coarse(CHF_IX[ic;jc;kc+1],n) +
+     $           L1*coarse(CHF_IX[ic;jc;kc+2],n)
+         endif
+         ]
+          CHF_ENDDO
+       enddo
+       
+       return
+       
+       end
+     
+C     -----------------------------------------------------------------
+C     subroutine PROLONGQUARTIC_R4 
+C     computes quartic prolongation of correction to finer level, ref ratio 4
+C     phi[h] += I[rh->h](coarse[rh])
+C     INPUTS/OUTPUTS:
+C     phi             <=   phi
+C     coarse           =>  coarse[rh]
+C     fineBox          =>  box of phi to be prolonged
+C     
+C     mfa Oct 2012
+C     ------------------------------------------------------------------
+      subroutine PROLONGQUARTIC_R4(
+     $     CHF_FRA[phi],
+     $     CHF_CONST_FRA[coarse],
+     $     CHF_BOX[fineBox])
+
+      INTEGER ncomp, n, refRatio
+      integer CHF_DDECL[i ;j ;k ]
+      integer CHF_DDECL[ic;jc;kc]
+      REAL_T L1,L2,L3,L4,L5,P1,P2,P3,P4,P5
+      data L1,L2/-.03759765625d0,.30078125d0/
+      data L3,L4/-.0830078125d0,-.2109375d0/
+      data L5/.03076171875d0/
+      data P1,P2/-.00927734375d0,.04296875d0/
+      data P3,P4/.0830078125d0,-.1328125d0/
+      data P5/.01611328125d0/
+      data refRatio/4/
+
+      ncomp = CHF_NCOMP[phi]
+      do n = 0, ncomp-1
+         CHF_MULTIDO[fineBox; i; j; k]
+
+         CHF_DTERM[
+         ic = (i+1048576)/refRatio - 1048576/refRatio;
+         jc = (j+1048576)/refRatio - 1048576/refRatio;
+         kc = (k+1048576)/refRatio - 1048576/refRatio]
+
+         phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     &        coarse(CHF_IX[ic;jc;kc],n)
+         CHF_DTERM[
+         if ( i-ic*refRatio == 0 ) then ! first cell (left)
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           L1*coarse(CHF_IX[ic-2;jc;kc],n) + 
+     $           L2*coarse(CHF_IX[ic-1;jc;kc],n) + 
+     $           L3*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           L4*coarse(CHF_IX[ic+1;jc;kc],n) +
+     $           L5*coarse(CHF_IX[ic+2;jc;kc],n)
+         else if ( i-ic*refRatio == 1 ) then ! 2nd cell
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           P1*coarse(CHF_IX[ic-2;jc;kc],n) + 
+     $           P2*coarse(CHF_IX[ic-1;jc;kc],n) + 
+     $           P3*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           P4*coarse(CHF_IX[ic+1;jc;kc],n) +
+     $           P5*coarse(CHF_IX[ic+2;jc;kc],n)
+         else if ( i-ic*refRatio == 2 ) then ! 3nd cell
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           P5*coarse(CHF_IX[ic-2;jc;kc],n) + 
+     $           P4*coarse(CHF_IX[ic-1;jc;kc],n) +
+     $           P3*coarse(CHF_IX[ic;jc;kc],n) +
+     $           P2*coarse(CHF_IX[ic+1;jc;kc],n) +
+     $           P1*coarse(CHF_IX[ic+2;jc;kc],n)
+         else if ( i-ic*refRatio == 3 ) then ! right
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           L5*coarse(CHF_IX[ic-2;jc;kc],n) + 
+     $           L4*coarse(CHF_IX[ic-1;jc;kc],n) + 
+     $           L3*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           L2*coarse(CHF_IX[ic+1;jc;kc],n) +
+     $           L1*coarse(CHF_IX[ic+2;jc;kc],n)
+         else
+            print *,'error'
+         endif;
+         if ( j-jc*refRatio == 0 ) then ! first cell (left)
+            phi(CHF_IX[i;j;k],n) = phi(CHF_IX[i;j;k],n) +
+     $           L1*coarse(CHF_IX[ic;jc-2;kc],n) + 
+     $           L2*coarse(CHF_IX[ic;jc-1;kc],n) + 
+     $           L3*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           L4*coarse(CHF_IX[ic;jc+1;kc],n) +
+     $           L5*coarse(CHF_IX[ic;jc+2;kc],n)
+         else if ( j-jc*refRatio == 1 ) then ! 2nd cell
+            phi(CHF_IX[i;j;k],n) = phi(CHF_IX[i;j;k],n) +
+     $           P1*coarse(CHF_IX[ic;jc-2;kc],n) + 
+     $           P2*coarse(CHF_IX[ic;jc-1;kc],n) + 
+     $           P3*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           P4*coarse(CHF_IX[ic;jc+1;kc],n) +
+     $           P5*coarse(CHF_IX[ic;jc+2;kc],n)
+         else if ( j-jc*refRatio == 2 ) then ! 3nd cell
+            phi(CHF_IX[i;j;k],n) = phi(CHF_IX[i;j;k],n) +
+     $           P5*coarse(CHF_IX[ic;jc-2;kc],n) + 
+     $           P4*coarse(CHF_IX[ic;jc-1;kc],n) +
+     $           P3*coarse(CHF_IX[ic;jc;kc],n) +
+     $           P2*coarse(CHF_IX[ic;jc+1;kc],n) +
+     $           P1*coarse(CHF_IX[ic;jc+2;kc],n)
+         else if ( j-jc*refRatio == 3 ) then ! right
+            phi(CHF_IX[i;j;k],n) =  phi(CHF_IX[i;j;k],n) +
+     $           L5*coarse(CHF_IX[ic;jc-2;kc],n) + 
+     $           L4*coarse(CHF_IX[ic;jc-1;kc],n) + 
+     $           L3*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           L2*coarse(CHF_IX[ic;jc+1;kc],n) +
+     $           L1*coarse(CHF_IX[ic;jc+2;kc],n)
+         else
+            print *,'error'
+         endif;
+         if ( k-kc*refRatio == 0 ) then ! first cell (left)
+            phi(CHF_IX[i;j;k],n) = phi(CHF_IX[i;j;k],n) +
+     $           L1*coarse(CHF_IX[ic;jc;kc-2],n) + 
+     $           L2*coarse(CHF_IX[ic;jc;kc-1],n) + 
+     $           L3*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           L4*coarse(CHF_IX[ic;jc;kc+1],n) +
+     $           L5*coarse(CHF_IX[ic;jc;kc+2],n)
+         else if ( k-kc*refRatio == 1 ) then ! 2nd cell
+            phi(CHF_IX[i;j;k],n) = phi(CHF_IX[i;j;k],n) +
+     $           P1*coarse(CHF_IX[ic;jc;kc-2],n) + 
+     $           P2*coarse(CHF_IX[ic;jc;kc-1],n) + 
+     $           P3*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           P4*coarse(CHF_IX[ic;jc;kc+1],n) +
+     $           P5*coarse(CHF_IX[ic;jc;kc+2],n)
+         else if ( k-kc*refRatio == 2 ) then ! 3nd cell
+            phi(CHF_IX[i;j;k],n) = phi(CHF_IX[i;j;k],n) +
+     $           P5*coarse(CHF_IX[ic;jc;kc-2],n) + 
+     $           P4*coarse(CHF_IX[ic;jc;kc-1],n) +
+     $           P3*coarse(CHF_IX[ic;jc;kc],n) +
+     $           P2*coarse(CHF_IX[ic;jc;kc+1],n) +
+     $           P1*coarse(CHF_IX[ic;jc;kc+2],n)
+         else if ( k-kc*refRatio == 3 ) then ! right
+            phi(CHF_IX[i;j;k],n) = phi(CHF_IX[i;j;k],n) +
+     $           L5*coarse(CHF_IX[ic;jc;kc-2],n) + 
+     $           L4*coarse(CHF_IX[ic;jc;kc-1],n) + 
+     $           L3*coarse(CHF_IX[ic;jc;kc],n) + 
+     $           L2*coarse(CHF_IX[ic;jc;kc+1],n) +
+     $           L1*coarse(CHF_IX[ic;jc;kc+2],n)
+         else
+            print *,'error'
+         endif
+         ]
+          CHF_ENDDO
+       enddo
+       
+       return
+       
+       end
+
+      subroutine GETFLUXLAP(
+     &     CHF_FRA[flux],
+     &     CHF_CONST_FRA[phi],
+     &     CHF_BOX[box],
+     &     CHF_CONST_REAL[beta_dx],
+     &     CHF_CONST_INT[a_idir])
+      
+      INTEGER ncomp,n
+      integer CHF_DDECL[ii; jj; kk]
+      integer CHF_DDECL[i ; j ; k ]
+
+      ncomp = CHF_NCOMP[phi]
+
+      CHF_DTERM[
+      ii = CHF_ID(a_idir, 0);
+      jj = CHF_ID(a_idir, 1);
+      kk = CHF_ID(a_idir, 2)]
+
+      do n = 0, ncomp-1
+          CHF_MULTIDO[box; i; j; k]
+
+          flux(CHF_IX[i;j;k],n) =
+     &        (phi(CHF_IX[i;j;k],n)-
+     &         phi(CHF_IX[i-ii;j-jj;k-kk],n))*beta_dx
+          CHF_ENDDO
+      enddo
+
+      return
+
+      end
+
+C     -----------------------------------------------------------------
+C     subroutine NEWGETFLUX4
+C     compute flux for flux correction with LevelFluxRegister
+C
+C     INPUTS/OUTPUTS:
+C     flux     <=   d phi/ dx at cell face 
+C     phi       =>  phi
+C     box       =>  the edge box of flux
+C     beta_dx   =>  m_beta*scale/dx
+C     a_idir    =>  dimension of the flux
+C
+C     Warning: Phi needs two more cells on all sides
+C
+C     Qinghai Zhang July 06, 2009
+C     ------------------------------------------------------------------
+      subroutine NEWGETFLUX4(
+     &    CHF_FRA[flux],
+     &    CHF_CONST_FRA[phi],
+     &    CHF_BOX[box],
+     &    CHF_CONST_REAL[beta_dx],
+     &    CHF_CONST_INT[a_idir])
+      INTEGER ncomp,n
+      integer CHF_DDECL[ii; jj; kk]
+      integer CHF_DDECL[i ; j ; k ]
+
+      ncomp = CHF_NCOMP[phi]
+
+      CHF_DTERM[
+      ii = CHF_ID(a_idir, 0);
+      jj = CHF_ID(a_idir, 1);
+      kk = CHF_ID(a_idir, 2)]
+
+      do n = 0, ncomp-1
+          CHF_MULTIDO[box; i; j; k]
+          !print *,'i=',i,', j=',j,', i-2*ii=',i-2*ii,', j-2*jj=',j-2*jj
+          flux(CHF_IX[i;j;k],n) = beta_dx * twelfth *
+     &        ( fifteen*phi(CHF_IX[i;j;k],n)
+     &           + phi(CHF_IX[i-2*ii;j-2*jj;k-2*kk],n)
+     &           - phi(CHF_IX[i+ii;j+jj;k+kk],n)
+     &           - fifteen*phi(CHF_IX[i-ii;j-jj;k-kk],n) )
+          CHF_ENDDO
+      enddo
+
+      return
+
+      end
+
+C     -----------------------------------------------------------------
+C     subroutine GSRBHELMHOLTZ4_FAS
+C     4th-order GSRB smoother for Helmholtz equation.
+C
+C     INPUTS/OUTPUTS:
+C     phi      <=   phi
+C     rhs       =>  laplacian(phi)
+C     region    =>  box smoothed 
+C     dx        =>  cell spacing
+C     tmp       =>  a copy of phi used for scratch space
+C     alpha     =>  coefficient of phi
+C     beta      =>  coefficient of lap(phi)
+C     redBlack  =>  0 for red pass; 1 for black pass
+C     omega  => 
+C
+C     Warning: phi, rhs, tmp must have the same number
+C              of components and span region.  
+C     Phi needs two more cells on all sides
+C
+C     Qinghai Zhang Nov 06, 2009
+C     ------------------------------------------------------------------
+      subroutine GSRBHELMHOLTZ4_FAS(
+     &     CHF_FRA[phi],
+     &     CHF_CONST_FRA[rhs],
+     &     CHF_BOX[region],
+     &     CHF_CONST_REAL[dx],
+     &     CHF_FRA[tmp],
+     &     CHF_CONST_REAL[alpha],
+     &     CHF_CONST_REAL[beta],
+     &     CHF_CONST_INT[redBlack], 
+     &     CHF_CONST_REAL[omega] )
+
+      REAL_T dx2t, lambda, lap, dxinv, helm
+      integer CHF_DDECL[i;j;k]
+      integer n,ncomp,indtot,imin,imax,red,black
+
+      red = 0
+      black = 1
+      dx2t = twelve*dx*dx
+      dxinv = one/(dx*dx)
+      lambda = omega/(alpha - beta*thirty*CH_SPACEDIM*twelfth*dxinv)
+
+      ncomp = CHF_NCOMP[phi]
+      if(ncomp .ne. CHF_NCOMP[rhs]) then
+         call MAYDAYERROR()
+      endif
+
+      do n = 0, ncomp - 1
+C     
+C     the red pass
+C     
+         if (redBlack .eq. red) then
+#if CH_SPACEDIM > 2
+            do k=CHF_LBOUND[region; 2], CHF_UBOUND[region; 2]
+#endif
+#if CH_SPACEDIM > 1
+               do j=CHF_LBOUND[region; 1], CHF_UBOUND[region; 1]
+#endif
+                  imin = CHF_LBOUND[region; 0]
+                  indtot = CHF_DTERM[imin; + j; + k]
+                  imin = imin + abs(mod(indtot+red, 2))
+                  imax = CHF_UBOUND[region; 0]
+                  do i = imin, imax, 2
+                     
+                     lap = ( CHF_DTERM[ 
+     &   sixteen*phi(CHF_IX[i-1;j  ;k  ],n) - phi(CHF_IX[i-2;j  ;k  ],n)
+     & + sixteen*phi(CHF_IX[i+1;j  ;k  ],n) - phi(CHF_IX[i+2;j  ;k  ],n);
+     & + sixteen*phi(CHF_IX[i  ;j-1;k  ],n) - phi(CHF_IX[i  ;j-2;k  ],n)
+     & + sixteen*phi(CHF_IX[i  ;j+1;k  ],n) - phi(CHF_IX[i  ;j+2;k  ],n);
+     & + sixteen*phi(CHF_IX[i  ;j  ;k-1],n) - phi(CHF_IX[i  ;j  ;k-2],n)
+     & + sixteen*phi(CHF_IX[i  ;j  ;k+1],n)-phi(CHF_IX[i  ;j  ;k+2],n)]
+     &                     -(thirty*CH_SPACEDIM)*phi(CHF_IX[i;j;k],n) )
+     &       * twelfth * dxinv
+
+          helm = alpha*phi(CHF_IX[i;j;k],n) + beta*lap
+
+          tmp(CHF_IX[i;j;k],n) = phi(CHF_IX[i;j;k],n) +
+     &      lambda*( rhs(CHF_IX[i;j;k],n) - helm )
+            enddo
+#if CH_SPACEDIM > 1
+          enddo
+#endif
+#if CH_SPACEDIM > 2
+        enddo
+#endif
+C
+C     the black pass
+C
+        else if (redBlack .eq. black) then
+#if CH_SPACEDIM > 2
+        do k=CHF_LBOUND[region; 2], CHF_UBOUND[region; 2]
+#endif
+#if CH_SPACEDIM > 1
+          do j=CHF_LBOUND[region; 1], CHF_UBOUND[region; 1]
+#endif
+            imin = CHF_LBOUND[region; 0]
+            indtot = CHF_DTERM[imin; + j; + k]
+            imin = imin + abs(mod(indtot+black, 2))
+            imax = CHF_UBOUND[region; 0]
+            do i = imin, imax, 2
+
+               lap = ( CHF_DTERM[
+     &   sixteen*tmp(CHF_IX[i+1;j;k],n) - tmp(CHF_IX[i+2;j;k],n)
+     & + sixteen*tmp(CHF_IX[i-1;j;k],n) - tmp(CHF_IX[i-2;j;k],n);
+     & + sixteen*tmp(CHF_IX[i;j+1;k],n) - tmp(CHF_IX[i;j+2;k],n)
+     & + sixteen*tmp(CHF_IX[i;j-1;k],n) - tmp(CHF_IX[i;j-2;k],n);
+     & + sixteen*tmp(CHF_IX[i;j;k+1],n) - tmp(CHF_IX[i;j;k+2],n)
+     & + sixteen*tmp(CHF_IX[i;j;k-1],n) - tmp(CHF_IX[i;j;k-2],n) ]
+     & - (thirty*CH_SPACEDIM)*tmp(CHF_IX[i;j;k],n) )
+     &              * twelfth * dxinv
+
+               helm = alpha*tmp(CHF_IX[i;j;k],n) + beta*lap
+               
+               phi(CHF_IX[i;j;k],n) = tmp(CHF_IX[i;j;k],n) +
+     &              lambda*( rhs(CHF_IX[i;j;k],n) - helm )
+
+            enddo
+#if CH_SPACEDIM > 1
+          enddo
+#endif
+#if CH_SPACEDIM > 2
+        enddo
+#endif
+C
+C    assign the red points
+C
+#if CH_SPACEDIM > 2
+        do k=CHF_LBOUND[region; 2], CHF_UBOUND[region; 2]
+#endif
+#if CH_SPACEDIM > 1
+          do j=CHF_LBOUND[region; 1], CHF_UBOUND[region; 1]
+#endif
+            imin = CHF_LBOUND[region; 0]
+            indtot = CHF_DTERM[imin; + j; + k]
+            imin = imin + abs(mod(indtot+red, 2))
+            imax = CHF_UBOUND[region; 0]
+            do i = imin, imax, 2
+               phi(CHF_IX[i;j;k],n) = tmp(CHF_IX[i;j;k],n)
+            enddo
+#if CH_SPACEDIM > 1
+          enddo
+#endif
+#if CH_SPACEDIM > 2
+        enddo
+#endif
+
+        else
+           call MAYDAYERROR()
+        end if
+      enddo
+
+      return
+      end
+
+
+
+C     -----------------------------------------------------------------
+C     subroutine RESTRICTRES4
+C     computes 4th-order restriction of residual to a coarser multgrid level
+C        res[2h] = I[h->2h] (rhs[h] - L(phi[h]))
+C     INPUTS/OUTPUTS:
+C     res       <=  res[2h]
+C     rhs       =>  rhs[h]
+C     phi       =>  phi[h]
+C     alpha     =>  Coefficient of the identity operator
+C     beta      =>  Coefficient of the laplacian operator
+C     region    =>  Box over which rhs is defined (in h index space)
+C     dx        =>  grid spacing in h
+C
+C     Qinghai Zhang July 06, 2009
+C     ------------------------------------------------------------------
+c$$$      subroutine RESTRICTRES4(
+c$$$     &     CHF_FRA[res],
+c$$$     &     CHF_CONST_FRA[phi],
+c$$$     &     CHF_CONST_FRA[rhs],
+c$$$     &     CHF_CONST_REAL[alpha],
+c$$$     &     CHF_CONST_REAL[beta],
+c$$$     &     CHF_BOX[region],
+c$$$     &     CHF_CONST_REAL[dx])
+c$$$
+c$$$      REAL_T denom,dxinv,lofphi,lap
+c$$$      integer n,ncomp
+c$$$
+c$$$      integer CHF_DDECL[i;j;k]
+c$$$      integer CHF_DDECL[ii;jj;kk]
+c$$$
+c$$$      ncomp = CHF_NCOMP[phi]
+c$$$
+c$$$      dxinv = one / (dx*dx)
+c$$$      denom = D_TERM(2, *2, *2)
+c$$$
+c$$$      do n = 0, ncomp-1
+c$$$        CHF_MULTIDO[region; i; j; k]
+c$$$          CHF_DTERM[
+c$$$          ii = i/2 ;
+c$$$          jj = j/2 ;
+c$$$          kk = k/2 ]
+c$$$
+c$$$          lap = ( CHF_DTERM[ 
+c$$$     &   sixteen*phi(CHF_IX[i-1;j  ;k  ],n) - phi(CHF_IX[i-2;j  ;k  ],n)
+c$$$     & + sixteen*phi(CHF_IX[i+1;j  ;k  ],n) - phi(CHF_IX[i+2;j  ;k  ],n);
+c$$$     & + sixteen*phi(CHF_IX[i  ;j-1;k  ],n) - phi(CHF_IX[i  ;j-2;k  ],n)
+c$$$     & + sixteen*phi(CHF_IX[i  ;j+1;k  ],n) - phi(CHF_IX[i  ;j+2;k  ],n);
+c$$$     & + sixteen*phi(CHF_IX[i  ;j  ;k-1],n) - phi(CHF_IX[i  ;j  ;k-2],n)
+c$$$     & + sixteen*phi(CHF_IX[i  ;j  ;k+1],n) - phi(CHF_IX[i  ;j  ;k+2],n)]
+c$$$     &                     -(thirty*CH_SPACEDIM)*phi(CHF_IX[i;j;k],n) )
+c$$$     &       * twelfth * dxinv
+c$$$
+c$$$          lofphi = alpha*phi(CHF_IX[i;j;k],n) + beta*lap
+c$$$
+c$$$          res(CHF_IX[ii;jj;kk],n) = res(CHF_IX[ii;jj;kk],n)
+c$$$     &                            + (rhs(CHF_IX[i;j;k],n) - lofphi) / denom
+c$$$        CHF_ENDDO
+c$$$      enddo
+c$$$
+c$$$      return
+c$$$      end
+
+C     -----------------------------------------------------------------
+C     subroutine OPERATORLAPRES4
+C     computes 4th-order 5-point residual for the Helmholtz equation
+C
+C     INPUTS/OUTPUTS:
+C     r        <=   rhs - lap(phi)
+C     phi       =>  phi
+C     rhs       =>
+C     dx        =>  cell spacing
+C     
+C     Warning: Phi needs two more cell on all sides
+C     
+C     Qinghai Zhang July 06, 2009
+C     ------------------------------------------------------------------
+      subroutine OPERATORLAPRES4(
+     &     CHF_FRA[r],
+     &     CHF_CONST_FRA[phi],
+     &     CHF_CONST_FRA[rhs],
+     &     CHF_BOX[region],
+     &     CHF_CONST_REAL[dx],
+     &     CHF_CONST_REAL[alpha],
+     &     CHF_CONST_REAL[beta])
+      
+      REAL_T dxinv, lap, lhs
+      integer n,ncomp
+      integer CHF_DDECL[i;j;k]
+      
+      ncomp = CHF_NCOMP[phi]
+      
+      dxinv = one/(dx*dx)
+      do n = 0, ncomp-1
+         CHF_MULTIDO[region; i; j; k]
+         
+         lap = ( CHF_DTERM[ 
+     &        sixteen*phi(CHF_IX[i-1;j  ;k  ],n) - phi(CHF_IX[i-2;j  ;k  ],n)
+     &        + sixteen*phi(CHF_IX[i+1;j  ;k  ],n) - phi(CHF_IX[i+2;j  ;k  ],n);
+     &        + sixteen*phi(CHF_IX[i  ;j-1;k  ],n) - phi(CHF_IX[i  ;j-2;k  ],n)
+     &        + sixteen*phi(CHF_IX[i  ;j+1;k  ],n) - phi(CHF_IX[i  ;j+2;k  ],n);
+     &        + sixteen*phi(CHF_IX[i  ;j  ;k-1],n) - phi(CHF_IX[i  ;j  ;k-2],n)
+     &        + sixteen*phi(CHF_IX[i  ;j  ;k+1],n) - phi(CHF_IX[i  ;j  ;k+2],n)]
+     &        -(thirty*CH_SPACEDIM)*phi(CHF_IX[i;j;k],n) )
+     &        * twelfth * dxinv
+         
+         lhs = alpha*phi(CHF_IX[i;j;k],n) + beta*lap
+         
+         r(CHF_IX[i;j;k],n) = rhs(CHF_IX[i;j;k],n) - lhs
+         CHF_ENDDO
+      enddo
+      
+      return
+      end
+
+C     -----------------------------------------------------------------
+C     subroutine OPERATORLAP4
+C     4th-order 5-point operator for the Helmholtz equation
+C     
+C     INPUTS/OUTPUTS:
+C     phi       =>  phi
+C     lofphi   <=   laplacian
+C     dx        =>  cell spacing
+C
+C     Warning: phi, lofphi must have the same number
+C              of components and span region.  
+C     Phi needs two more cells on all sides
+C
+C     Qinghai Zhang May 08, 2009
+C     ------------------------------------------------------------------
+      subroutine OPERATORLAP4(
+     &     CHF_FRA[lofphi],
+     &     CHF_CONST_FRA[phi],
+     &     CHF_BOX[region],
+     &     CHF_CONST_REAL[dx],
+     &     CHF_CONST_REAL[alpha],
+     &     CHF_CONST_REAL[beta])
+
+      REAL_T dxinv, lap
+      integer n,ncomp
+      integer CHF_DDECL[i;j;k]
+
+      ncomp = CHF_NCOMP[phi]
+      if(ncomp .ne. CHF_NCOMP[lofphi]) then
+C         print*, 'OPERATORLAP4:phi and rhs incompatible'
+         call MAYDAYERROR()
+      endif
+
+      dxinv = one/(dx*dx)
+      do n = 0, ncomp-1
+        CHF_MULTIDO[region; i; j; k]
+
+          lap = ( CHF_DTERM[ 
+     &   sixteen*phi(CHF_IX[i-1;j  ;k  ],n) - phi(CHF_IX[i-2;j  ;k  ],n)
+     & + sixteen*phi(CHF_IX[i+1;j  ;k  ],n) - phi(CHF_IX[i+2;j  ;k  ],n);
+     & + sixteen*phi(CHF_IX[i  ;j-1;k  ],n) - phi(CHF_IX[i  ;j-2;k  ],n)
+     & + sixteen*phi(CHF_IX[i  ;j+1;k  ],n) - phi(CHF_IX[i  ;j+2;k  ],n);
+     & + sixteen*phi(CHF_IX[i  ;j  ;k-1],n) - phi(CHF_IX[i  ;j  ;k-2],n)
+     & + sixteen*phi(CHF_IX[i  ;j  ;k+1],n) - phi(CHF_IX[i  ;j  ;k+2],n)]
+     &                     -(thirty*CH_SPACEDIM)*phi(CHF_IX[i;j;k],n) )
+     &       * twelfth * dxinv
+
+          lofphi(CHF_IX[i;j;k],n) = alpha*phi(CHF_IX[i;j;k],n)+beta*lap
+        CHF_ENDDO
+      enddo
+
+      return
+      end
+
