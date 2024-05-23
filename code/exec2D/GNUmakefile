@@ -5,11 +5,11 @@ ebase = driver
 CHOMBO_HOME = ../../../Chombo/lib
 
 # names of Chombo libraries needed by this program, in order of search.
-LibNames = EBAMRTimeDependent EBAMRElliptic  EBAMRTools Workshop EBTools AMRTimeDependent AMRElliptic AMRTools BoxTools
+LibNames = AMRTimeDependent AMRElliptic AMRTools BoxTools
 
 # the locations of the source code directories
 base_dir = .
-src_dirs = ../src ../src_amrfas
+src_dirs = ../util ../src ../src_amrfas
 
 # input file for 'run' target
 INPUT = fas.inputs

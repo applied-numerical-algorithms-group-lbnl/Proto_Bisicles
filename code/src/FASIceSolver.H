@@ -67,13 +67,12 @@ class FASIceViscouseTensorOp : public AMRFAS_LDFOp
 {
   friend class FASIceViscouseTensorOpFactory;
 public:
-  //! Constructor.
-  FASIceViscouseTensorOp( int a_o, 
-			  const DisjointBoxLayout &a_grid,
-			  const ConstitutiveRelation*  a_constRelPtr,
-			  const BasalFrictionRelation* a_basalFrictionRelPtr,
-			  IceThicknessIBC* a_bc
-			  );
+  FASIceViscouseTensorOp( int                                 a_o, 
+                          const DisjointBoxLayout &           a_grid,
+                          const RealVect          &           a_rvdx,
+                          const ConstitutiveRelation*         a_constRelPtr,
+                          const BasalFrictionRelation*        a_basalFrictionRelPtr,
+                          IceThicknessIBC* a_bc); 
   
   virtual ~FASIceViscouseTensorOp()
   {
