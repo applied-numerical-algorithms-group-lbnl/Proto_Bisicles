@@ -16,3 +16,6 @@ INPUT = fas.inputs
 
 include $(CHOMBO_HOME)/mk/Make.example
 
+pristine:
+	cd  $(CHOMBO_HOME); make realclean; cd -;
+	make realclean

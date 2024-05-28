@@ -372,7 +372,8 @@ void FASIceViscouseTensorOpFactory::define( const ProblemDomain& a_coarseDomain,
     }
   // complete define for VTO factory
   CH_assert(m_VTOFactory == NULL);
-  BCFunction bc = m_bc->velocitySolveBC();
+  RefCountedPtr<CompGridVTOBC> bc_rcp = m_bc->velocitySolveBC();
+  BCHolder bc(bc_rcp);
 
   m_VTOFactory = new ViscousTensorOpFactory( a_grids,
 					     eta,
@@ -582,10 +583,13 @@ FASIceViscouseTensorOp::computeMu( LevelData<FArrayBox>& a_horizontalVel,
   // 			    true);
   // levelVel.exchange(cornerCopier);
 
+  Real scale = 1.; //dtg
   m_constRelPtr->computeFaceMu( levelMu,
 				levelVel,
+	                        //added argument to match header --dtg                                 
+                                scale, 
 				a_crsVel,
-				refToCoarser(),
+        			refToCoarser(),
 				levelA,
 				levelCS,
 				m_domain,
@@ -617,9 +621,20 @@ FASIceViscouseTensorOp::computeMu( LevelData<FArrayBox>& a_horizontalVel,
 
       // also update alpha (or C)
       const Box& gridBox = levelGrids[dit];
-      m_basalFrictionRelPtr->computeAlpha
-	(levelC[dit], levelVel[dit], levelCS.getThicknessOverFlotation()[dit], levelBeta[dit] ,
-	 levelCS.getFloatingMask()[dit],gridBox);
+      {
+        FArrayBox       & t_alpha    = levelC[dit];
+        const FArrayBox & t_basalVel = levelVel[dit];
+        const FArrayBox & t_C        = levelCS.getThicknessOverFlotation()[dit];
+        Real scale = 1.; //dtg
+        int  ilevel = 0; //dtg ?
+        m_basalFrictionRelPtr->computeAlpha(t_alpha,
+                                            t_basalVel,
+                                            t_C,scale,
+                                            levelCS,
+                                            dit,
+                                            ilevel,
+                                            gridBox);
+      }
 
       levelC[dit] += levelBeta0[dit];
 

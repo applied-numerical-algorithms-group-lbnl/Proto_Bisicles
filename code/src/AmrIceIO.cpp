@@ -2078,9 +2078,9 @@ void AmrIce::writeMetaDataHDF5(HDF5Handle& a_handle) const
   headerData.m_int["current_step"] = m_cur_step; 
   headerData.m_real["time"] = time();
   headerData.m_real["dt"] = m_dt;
-  headerData.m_string["svn_version"] = SVN_REV;
-  headerData.m_string["svn_repository"] = SVN_REP;
-  headerData.m_string["svn_url"] = SVN_URL;
+//  headerData.m_string["svn_version"] = SVN_REV;
+//  headerData.m_string["svn_repository"] = SVN_REP;
+//  headerData.m_string["svn_url"] = SVN_URL;
   headerData.m_int["bisicles_version_major"] = BISICLES_VERSION_MAJOR;
   headerData.m_int["bisicles_version_minor"] = BISICLES_VERSION_MINOR;
   headerData.m_int["bisicles_patch_number"] = BISICLES_PATCH_NUMBER;
@@ -2863,7 +2863,7 @@ void AmrIce::accumulateCFData(Real a_dt, bool a_reset)
     
   auto fun = [&current, this](int a_comp,
   			      std::function<const LevelData<FArrayBox>*(int,LevelData<FArrayBox>&) > a_ld,
-  			      Interval a_interval = Interval(0,0))
+  			      Interval a_interval)
 
 
     {
