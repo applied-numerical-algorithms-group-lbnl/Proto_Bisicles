@@ -57,9 +57,7 @@ using std::string;
 #include "InverseVerticallyIntegratedVelocitySolver.H"
 #include "PetscIceSolver.H"
 #include "RelaxSolver.H"
-#ifdef CH_USE_FAS
 #include "FASIceSolver.H"
-#endif
 #include "KnownVelocitySolver.H"
 #include "VCAMRPoissonOp2.H"
 #include "AMRPoissonOpF_F.H"
@@ -174,14 +172,17 @@ AmrIce::AmrIce() : m_velSolver(NULL),
 		   m_basalFrictionRelation(NULL),
 		   m_basalRateFactor(NULL),
                    m_thicknessPhysPtr(NULL),
-                   m_thicknessIBCPtr(NULL), 
+                   m_thicknessIBCPtr(NULL),
+                   m_internalEnergyIBCPtr(NULL),
+		   m_calvingModelPtr(NULL),
                    m_surfaceFluxPtr(NULL),
 		   m_basalFluxPtr(NULL),
 		   m_surfaceHeatBoundaryDataPtr(NULL),
 		   m_basalHeatBoundaryDataPtr(NULL),
 		   m_topographyFluxPtr(NULL),
-                   m_basalFrictionPtr(NULL),
-		   m_calvingModelPtr(NULL)
+                   m_basalFrictionPtr(NULL)
+
+
 		   
 {
   setDefaults();
@@ -1626,7 +1627,6 @@ AmrIce::defineSolver()
         }
     }
 #endif
-#ifdef CH_USE_FAS
   else if (m_solverType == FASMGAMR)
     {
       // for now, at least, just delete any existing solvers
@@ -1665,7 +1665,6 @@ AmrIce::defineSolver()
           solver->setMaxIterations( m_maxSolverIterations );
         }
     }
-#endif
 #ifdef HAVE_PYTHON
   else if (m_solverType == Python)
     {

@@ -29,7 +29,14 @@ LevelDataIBC::LevelDataIBC( RefCountedPtr<LevelData<FArrayBox> > a_thck,
                             Real a_defaultTopography,
                             bool a_setDefaultValues
                             )
-                            :m_thck(a_thck),m_topg(a_topg),m_dx(a_dx),m_default_thickness(a_defaultThickness), m_default_topography(a_defaultTopography), m_set_default_values(a_setDefaultValues), m_isBCsetUp(false),m_verbose(true)
+                            :m_thck(a_thck),
+                             m_topg(a_topg),
+                             m_dx(a_dx),
+                             m_isBCsetUp(false),
+                             m_verbose(true),
+                             m_default_thickness(a_defaultThickness),
+                             m_default_topography(a_defaultTopography),
+                             m_set_default_values(a_setDefaultValues)
 {
   // Construction means nothing to me. It's a lot like Vienna.
   if (!m_thck.isNull())

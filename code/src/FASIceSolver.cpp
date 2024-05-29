@@ -1,11 +1,11 @@
 #ifdef CH_LANG_CC
 /*
-*      _______              __
-*     / ___/ /  ___  __ _  / /  ___
-*    / /__/ _ \/ _ \/  V \/ _ \/ _ \
-*    \___/_//_/\___/_/_/_/_.__/\___/
-*    Please refer to Copyright.txt, in Chombo's root directory.
-*/
+ *      _______              __
+ *     / ___/ /  ___  __ _  / /  ___
+ *    / /__/ _ \/ _ \/  V \/ _ \/ _ \
+ *    \___/_//_/\___/_/_/_/_.__/\___/
+ *    Please refer to Copyright.txt, in Chombo's root directory.
+ */
 #endif
 
 #include "FASIceSolver.H" 
@@ -23,14 +23,14 @@ static bool s_always_recompute_mu = false; // this does help convergance but it 
 
 ///
 /**
-   FASIceViscouseTensorOp: FAS IceViscouseTensor Op class
+   FASIceViscousTensorOp: FAS IceViscousTensor Op class
 */
-FASIceViscouseTensorOp::FASIceViscouseTensorOp( int a_o, 
-						const DisjointBoxLayout &a_grid,
-						const ConstitutiveRelation*  a_constRelPtr,
-						const BasalFrictionRelation* a_basalFrictionRelPtr,
-						IceThicknessIBC* a_bc
-						) :
+FASIceViscousTensorOp::FASIceViscousTensorOp( int a_o, 
+                                              const DisjointBoxLayout &a_grid,
+                                              const ConstitutiveRelation*  a_constRelPtr,
+                                              const BasalFrictionRelation* a_basalFrictionRelPtr,
+                                              IceThicknessIBC* a_bc
+  ) :
   AMRFAS_LDFOp( a_o, a_grid ),
   m_constThetaVal(238.15), // use isothermal ice temp from Pattyn(2003)
   m_vtopSafety(VTOP_DEFAULT_SAFETY),
@@ -52,8 +52,8 @@ FASIceViscouseTensorOp::FASIceViscouseTensorOp( int a_o,
 // CFInterp - default C-F interp 
 // ---------------------------------------------------------
 void 
-FASIceViscouseTensorOp::CFInterp( LevelData<FArrayBox>& a_phi,
-				  const LevelData<FArrayBox>& a_phiCoarse )
+FASIceViscousTensorOp::CFInterp( LevelData<FArrayBox>& a_phi,
+                                 const LevelData<FArrayBox>& a_phiCoarse )
 {
   m_VTO->cfinterp( a_phi, a_phiCoarse ); 
 }
@@ -62,22 +62,22 @@ FASIceViscouseTensorOp::CFInterp( LevelData<FArrayBox>& a_phi,
 // applyLevel - apply operator on one level - do BC's but no exchange or C-F
 // ---------------------------------------------------------
 void 
-FASIceViscouseTensorOp::applyLevel( LevelData<FArrayBox>& a_lhs,
-				    const LevelData<FArrayBox>& a_phi )
+FASIceViscousTensorOp::applyLevel( LevelData<FArrayBox>& a_lhs,
+                                   const LevelData<FArrayBox>& a_phi )
 {
-  CH_TIME("FASIceViscouseTensorOp::applyLevel");
+  CH_TIME("FASIceViscousTensorOp::applyLevel");
 
   // this is only called from base class apply()
   if( s_always_recompute_mu )
-    {
-      LevelData<FArrayBox>& phi = (LevelData<FArrayBox>&)a_phi; // need to force
+  {
+    LevelData<FArrayBox>& phi = (LevelData<FArrayBox>&)a_phi; // need to force
       
-      computeMu( phi, 0, 0 ); // lets do this a lot for now
-      // trick to get VTO to recompute D^-1 (m_relaxCoef)
-      m_VTO->setAlphaAndBeta( m_VTO->getAlpha(), m_VTO->getBeta() ); 
-      // this is used for G-S and Rich
-      scale( m_VTO->m_relaxCoef, m_smoothing_damping_factor );
-    }
+    computeMu( phi, 0, 0 ); // lets do this a lot for now
+    // trick to get VTO to recompute D^-1 (m_relaxCoef)
+    m_VTO->setAlphaAndBeta( m_VTO->getAlpha(), m_VTO->getBeta() ); 
+    // this is used for G-S and Rich
+    scale( m_VTO->m_relaxCoef, m_smoothing_damping_factor );
+  }
 
   // this applies BCs
   m_VTO->applyOp( a_lhs, a_phi, true ); // homogenous ? 
@@ -87,21 +87,21 @@ FASIceViscouseTensorOp::applyLevel( LevelData<FArrayBox>& a_lhs,
 // levelGSRB
 // ---------------------------------------------------------
 void 
-FASIceViscouseTensorOp::levelGSRB( RefCountedPtr<LevelData<FArrayBox> > a_phi,
-				   const RefCountedPtr<LevelData<FArrayBox> > a_rhs
-				   )
+FASIceViscousTensorOp::levelGSRB( RefCountedPtr<LevelData<FArrayBox> > a_phi,
+                                  const RefCountedPtr<LevelData<FArrayBox> > a_rhs
+  )
 {
-  CH_TIME("FASIceViscouseTensorOp::levelGSRB");
+  CH_TIME("FASIceViscousTensorOp::levelGSRB");
 
   if( s_always_recompute_mu )
-    {
-      LevelData<FArrayBox>& phi = *a_phi; 
+  {
+    LevelData<FArrayBox>& phi = *a_phi; 
       
-      computeMu( phi, 0, 0 ); // lets do this a lot for now  
-      // trick to get VTO to recompute D^-1 (m_relaxCoef)
-      m_VTO->setAlphaAndBeta( m_VTO->getAlpha(), m_VTO->getBeta() ); 
-      scale( m_VTO->m_relaxCoef, m_smoothing_damping_factor );
-    }
+    computeMu( phi, 0, 0 ); // lets do this a lot for now  
+    // trick to get VTO to recompute D^-1 (m_relaxCoef)
+    m_VTO->setAlphaAndBeta( m_VTO->getAlpha(), m_VTO->getBeta() ); 
+    scale( m_VTO->m_relaxCoef, m_smoothing_damping_factor );
+  }
 
   m_VTO->relax( *a_phi, *a_rhs, 1 );
 }
@@ -110,11 +110,11 @@ FASIceViscouseTensorOp::levelGSRB( RefCountedPtr<LevelData<FArrayBox> > a_phi,
 // levelRich
 // ---------------------------------------------------------
 void 
-FASIceViscouseTensorOp::levelRich( RefCountedPtr<LevelData<FArrayBox> > a_phi,
-				   const  RefCountedPtr<LevelData<FArrayBox> > a_rhs
-				   )
+FASIceViscousTensorOp::levelRich( RefCountedPtr<LevelData<FArrayBox> > a_phi,
+                                  const  RefCountedPtr<LevelData<FArrayBox> > a_rhs
+  )
 {
-  CH_TIME("FASIceViscouseTensorOp::levelRich");
+  CH_TIME("FASIceViscousTensorOp::levelRich");
   
   CH_assert(a_phi->isDefined());
   CH_assert(a_rhs->isDefined());
@@ -140,11 +140,11 @@ FASIceViscouseTensorOp::levelRich( RefCountedPtr<LevelData<FArrayBox> > a_phi,
 
 // ---------------------------------------------------------
 void 
-FASIceViscouseTensorOp::restrictState( RefCountedPtr<AMRFASOp<LevelData<FArrayBox> > > a_fOp, // fine op
-				       Copier &a_copier )    // copier from buffer to real distribution
+FASIceViscousTensorOp::restrictState( RefCountedPtr<AMRFASOp<LevelData<FArrayBox> > > a_fOp, // fine op
+                                      Copier &a_copier )    // copier from buffer to real distribution
 {
-  CH_TIME("FASIceViscouseTensorOp::restrictState");
-  const FASIceViscouseTensorOp * const fop = dynamic_cast<FASIceViscouseTensorOp*>( &(*a_fOp) );
+  CH_TIME("FASIceViscousTensorOp::restrictState");
+  const FASIceViscousTensorOp * const fop = dynamic_cast<FASIceViscousTensorOp*>( &(*a_fOp) );
   CH_assert(fop);
   int nRef = fop->refToCoarser();
 
@@ -154,23 +154,23 @@ FASIceViscouseTensorOp::restrictState( RefCountedPtr<AMRFASOp<LevelData<FArrayBo
 							     m_dx, 
 							     *fop->m_coordSys,
 							     nRef
-							     ));
+                                             ));
   const LevelData<FluxBox> &f_faceA = *fop->m_faceA;
   const DisjointBoxLayout& fdbl = fop->m_grid;  
   CH_assert( fdbl.coarsenable(nRef) );
   const int aNC = fop->m_faceA->nComp();
   if( !m_faceA )
+  {
+    m_faceA = RefCountedPtr<LevelData<FluxBox> >(new LevelData<FluxBox>( m_grid,
+                                                                         aNC,
+                                                                         IntVect::Unit) );
+    // zero out because averageToCoarse does not fill everything?
+    DataIterator dit = m_faceA->dataIterator();
+    for (dit.begin(); dit.ok(); ++dit)
     {
-      m_faceA = RefCountedPtr<LevelData<FluxBox> >(new LevelData<FluxBox>( m_grid,
-									   aNC,
-									   IntVect::Unit) );
-      // zero out because averageToCoarse does not fill everything?
-      DataIterator dit = m_faceA->dataIterator();
-      for (dit.begin(); dit.ok(); ++dit)
-        {
-          (*m_faceA)[dit].setVal(0.);
-	}
+      (*m_faceA)[dit].setVal(0.);
     }
+  }
   
   // restrict stuff that was copied in solver: m_faceA, m_Beta, m_Beta0
   CoarseAverageFace face_crs( fdbl, aNC, nRef );
@@ -192,34 +192,34 @@ FASIceViscouseTensorOp::restrictState( RefCountedPtr<AMRFASOp<LevelData<FArrayBo
 
 // ---------------------------------------------------------
 bool
-FASIceViscouseTensorOp::computeState( RefCountedPtr<LevelData<FArrayBox> > a_phi, 
-				      const RefCountedPtr<LevelData<FArrayBox> > a_CrsPhi,
- 				      const RefCountedPtr<LevelData<FArrayBox> > a_FinePhi
-				      )
+FASIceViscousTensorOp::computeState( RefCountedPtr<LevelData<FArrayBox> > a_phi, 
+                                     const RefCountedPtr<LevelData<FArrayBox> > a_CrsPhi,
+                                     const RefCountedPtr<LevelData<FArrayBox> > a_FinePhi
+  )
 {
-  CH_TIME("FASIceViscouseTensorOp::recomputeState");
+  CH_TIME("FASIceViscousTensorOp::recomputeState");
   if( !s_always_recompute_mu )
-    {
-      computeMu( *a_phi, a_CrsPhi, a_FinePhi );
-      // trick to get VTO to recompute D^-1 (m_relaxCoef)
-      m_VTO->setAlphaAndBeta( m_VTO->getAlpha(), m_VTO->getBeta() ); 
-      // this is used for G-S and Rich
-      scale( m_VTO->m_relaxCoef, m_smoothing_damping_factor );
-      return true;
-    }
+  {
+    computeMu( *a_phi, a_CrsPhi, a_FinePhi );
+    // trick to get VTO to recompute D^-1 (m_relaxCoef)
+    m_VTO->setAlphaAndBeta( m_VTO->getAlpha(), m_VTO->getBeta() ); 
+    // this is used for G-S and Rich
+    scale( m_VTO->m_relaxCoef, m_smoothing_damping_factor );
+    return true;
+  }
   else return false;
 }
 
 
 // ---------------------------------------------------------
 void
-FASIceViscouseTensorOp::reflux( const LevelData<FArrayBox>&        a_phiFine,
-				const LevelData<FArrayBox>&        a_phi,
-				LevelData<FArrayBox>&              a_residual,
-				AMRFASOp<LevelData<FArrayBox> >*   a_finerOp )
+FASIceViscousTensorOp::reflux( const LevelData<FArrayBox>&        a_phiFine,
+                               const LevelData<FArrayBox>&        a_phi,
+                               LevelData<FArrayBox>&              a_residual,
+                               AMRFASOp<LevelData<FArrayBox> >*   a_finerOp )
 {
-  CH_TIME("FASIceViscouseTensorOp::reflux");
-  const FASIceViscouseTensorOp * const fop = dynamic_cast<FASIceViscouseTensorOp*>( a_finerOp );
+  CH_TIME("FASIceViscousTensorOp::reflux");
+  const FASIceViscousTensorOp * const fop = dynamic_cast<FASIceViscousTensorOp*>( a_finerOp );
   CH_assert(fop);
 
   // this constructs a LevelFluxRegister each time - yikes 
@@ -232,13 +232,13 @@ FASIceViscouseTensorOp::reflux( const LevelData<FArrayBox>&        a_phiFine,
 
 ///
 /**
-   FASIceViscouseTensorOpFactory: ViscouseTensor derived class for FAS-VTO operator factory
+   FASIceViscousTensorOpFactory: ViscousTensor derived class for FAS-VTO operator factory
 */
-  //! Constructor. 1 dof, 2nd order.
-FASIceViscouseTensorOpFactory::FASIceViscouseTensorOpFactory(ConstitutiveRelation* a_constRelPtr,
-							     BasalFrictionRelation*a_basalFrictionRelPtr,
-							     IceThicknessIBC* a_bc
-							     ) : 
+//! Constructor. 1 dof, 2nd order.
+FASIceViscousTensorOpFactory::FASIceViscousTensorOpFactory(ConstitutiveRelation* a_constRelPtr,
+                                                           BasalFrictionRelation*a_basalFrictionRelPtr,
+                                                           IceThicknessIBC* a_bc
+  ) : 
   AMRFAS_LDFOpFactory( 1, 2 ),
   m_constRelPtr(a_constRelPtr),
   m_basalFrictionRelPtr(a_basalFrictionRelPtr),
@@ -258,15 +258,15 @@ FASIceViscouseTensorOpFactory::FASIceViscouseTensorOpFactory(ConstitutiveRelatio
 //    - override base define
 //
 RefCountedPtr<AMRFASOp<LevelData<FArrayBox> > > 
-FASIceViscouseTensorOpFactory::AMRNewOp( int a_ilev, const DisjointBoxLayout& a_grid, bool a_isSR_dummy )
+FASIceViscousTensorOpFactory::AMRNewOp( int a_ilev, const DisjointBoxLayout& a_grid, bool a_isSR_dummy )
 {
-  RefCountedPtr<FASIceViscouseTensorOp> newOp = 
-    RefCountedPtr<FASIceViscouseTensorOp>( new FASIceViscouseTensorOp( 2, 
-								       a_grid, 
-								       m_constRelPtr,
-								       m_basalFrictionRelPtr, 
-								       m_bc
-								       ) );
+  RefCountedPtr<FASIceViscousTensorOp> newOp = 
+    RefCountedPtr<FASIceViscousTensorOp>( new FASIceViscousTensorOp( 2, 
+                                                                     a_grid, 
+                                                                     m_constRelPtr,
+                                                                     m_basalFrictionRelPtr, 
+                                                                     m_bc
+                                            ) );
 
   // this defines the newOp's base class stuff
   AMRFAS_LDFOpFactory::AMRNewOp( a_ilev, newOp, false );
@@ -295,7 +295,7 @@ FASIceSolver::define( const ProblemDomain& a_coarseDomain,
 		      const RealVect& a_dxCrse,
 		      IceThicknessIBC* a_bc,
 		      int a_numLevels 
-		      )
+  )
 {
   CH_TIME("FASIceSolver::define");
 
@@ -303,10 +303,10 @@ FASIceSolver::define( const ProblemDomain& a_coarseDomain,
   // CH_assert(m_opFactoryPtr == NULL);
 
   // I don't have all the levels yet, so defer complete define
-  m_opFactoryPtr = RefCountedPtr<FASIceViscouseTensorOpFactory>
-    (new FASIceViscouseTensorOpFactory( a_constRelPtr, a_basalFrictionRelPtr, a_bc ) );
+  m_opFactoryPtr = RefCountedPtr<FASIceViscousTensorOpFactory>
+    (new FASIceViscousTensorOpFactory( a_constRelPtr, a_basalFrictionRelPtr, a_bc ) );
 
-  // define base solver class, makes coarse levels as needed, calls FASIceViscouseTensorOpFactory::define
+  // define base solver class, makes coarse levels as needed, calls FASIceViscousTensorOpFactory::define
   AMRFAS<LevelData<FArrayBox> >::define( a_coarseDomain,
 					 a_dxCrse,
 					 a_vectGrids,
@@ -314,21 +314,21 @@ FASIceSolver::define( const ProblemDomain& a_coarseDomain,
 					 *m_opFactoryPtr,
 					 0,
 					 a_numLevels
-					 );
+    );
 }
 
 // ---------------------------------------------------------
 //  AMR Factory define 
 //    - override base define
 //
-void FASIceViscouseTensorOpFactory::define( const ProblemDomain& a_coarseDomain, 
-					    const RealVect&      a_crsDx,
-					    const Vector<DisjointBoxLayout>& a_grids,
-					    const Vector<int>&   a_refRatios,
-					    int a_nSRGrids
-					    )
+void FASIceViscousTensorOpFactory::define( const ProblemDomain& a_coarseDomain, 
+                                           const RealVect&      a_crsDx,
+                                           const Vector<DisjointBoxLayout>& a_grids,
+                                           const Vector<int>&   a_refRatios,
+                                           int a_nSRGrids
+  )
 {
-  CH_TIME("FASIceViscouseTensorOpFactory::define");
+  CH_TIME("FASIceViscousTensorOpFactory::define");
   
   // call base implimentation
   AMRFASOpFactory<LevelData<FArrayBox> >::define( a_coarseDomain,
@@ -336,7 +336,7 @@ void FASIceViscouseTensorOpFactory::define( const ProblemDomain& a_coarseDomain,
 						  a_grids,
 						  a_refRatios,
 						  a_nSRGrids
-						  );
+    );
 
   // set alpha & beta here
   const Real alpha = -1.0;  // sort of wrong signs, but that's what B does 
@@ -348,28 +348,28 @@ void FASIceViscouseTensorOpFactory::define( const ProblemDomain& a_coarseDomain,
   Vector<RefCountedPtr<LevelData<FArrayBox> > > c(num_levels);
 
   for (int i = 0; i < num_levels; i++)
-    {
-      eta[i] = RefCountedPtr<LevelData<FluxBox> >(new LevelData<FluxBox>( a_grids[i], 
-									  1,
-									  IntVect::Zero));
+  {
+    eta[i] = RefCountedPtr<LevelData<FluxBox> >(new LevelData<FluxBox>( a_grids[i], 
+                                                                        1,
+                                                                        IntVect::Zero));
  
-      lambda[i] = RefCountedPtr<LevelData<FluxBox> >(new LevelData<FluxBox>( a_grids[i], 
-									     1,
-									     IntVect::Zero));
+    lambda[i] = RefCountedPtr<LevelData<FluxBox> >(new LevelData<FluxBox>( a_grids[i], 
+                                                                           1,
+                                                                           IntVect::Zero));
 
-      c[i] = RefCountedPtr<LevelData<FArrayBox> >(new LevelData<FArrayBox>( a_grids[i], 
-									    1,
-									    IntVect::Zero));
+    c[i] = RefCountedPtr<LevelData<FArrayBox> >(new LevelData<FArrayBox>( a_grids[i], 
+                                                                          1,
+                                                                          IntVect::Zero));
 
-      // this is used to get relaxation values too early so needs to be set to avoid assert failures!
-      DataIterator dit = c[i]->dataIterator();
-      for (dit.begin(); dit.ok(); ++dit)
-	{
-	  (*c[i])[dit].setVal(1.0);
-	  (*lambda[i])[dit].setVal(1.0);
-	  (*eta[i])[dit].setVal(1.0);
-	}
+    // this is used to get relaxation values too early so needs to be set to avoid assert failures!
+    DataIterator dit = c[i]->dataIterator();
+    for (dit.begin(); dit.ok(); ++dit)
+    {
+      (*c[i])[dit].setVal(1.0);
+      (*lambda[i])[dit].setVal(1.0);
+      (*eta[i])[dit].setVal(1.0);
     }
+  }
   // complete define for VTO factory
   CH_assert(m_VTOFactory == NULL);
   RefCountedPtr<CompGridVTOBC> bc_rcp = m_bc->velocitySolveBC();
@@ -385,86 +385,102 @@ void FASIceViscouseTensorOpFactory::define( const ProblemDomain& a_coarseDomain,
 					     a_coarseDomain,
 					     a_crsDx[0],
 					     bc
-					     );
+    );
 }
 
 /// solve for isothermal ice
 /** beta scales sliding coefficient C == acoef in terms of the ViscousTensorOp
  */
 int
-FASIceSolver::solve( Vector<LevelData<FArrayBox>* >& a_horizontalVel,
-		     Vector<LevelData<FArrayBox>* >& a_calvedIce,
-		     Vector<LevelData<FArrayBox>* >& a_addedIce,
-		     Vector<LevelData<FArrayBox>* >& a_removedIce,
-		     Real& a_initialResidualNorm, 
-		     Real& a_finalResidualNorm,
-		     const Real a_convergenceMetric,
-		     const Vector<LevelData<FArrayBox>* >& a_rhs,
-		     const Vector<LevelData<FArrayBox>* >& a_beta,  // Basal C (a_beta)
-		     const Vector<LevelData<FArrayBox>* >& a_beta0, // not used
-		     const Vector<LevelData<FArrayBox>* >& a_A,
-		     const Vector<LevelData<FluxBox>* >& a_muCoef,  // not used, this is computed
-		     Vector<RefCountedPtr<LevelSigmaCS > >& a_coordSys,
-		     Real a_time,
-		     int a_lbase, 
-		     int a_maxLevel
-		     )
+FASIceSolver::solve(Vector<LevelData<FArrayBox>* >& a_horizontalVel,
+		    Vector<LevelData<FArrayBox>* >& a_calvedIce,
+		    Vector<LevelData<FArrayBox>* >& a_addedIce,
+		    Vector<LevelData<FArrayBox>* >& a_removedIce,
+		    Real& a_initialResidualNorm, Real& a_finalResidualNorm,
+		    const Real a_convergenceMetric,
+                    const Vector<LevelData<FArrayBox>* >& a_rhs,
+                    const Vector<LevelData<FArrayBox>* >& a_beta,
+		    const Vector<LevelData<FArrayBox>* >& a_beta0,
+                    const Vector<LevelData<FArrayBox>* >& a_A,
+		    const Vector<LevelData<FArrayBox>* >& a_muCoef,
+                    Vector<RefCountedPtr<LevelSigmaCS > >& a_coordSys,
+                    Real a_time,
+                    int a_lbase, int a_maxLevel)
+/**
+   FASIceSolver::solve( Vector<LevelData<FArrayBox>* >& a_horizontalVel,
+   Vector<LevelData<FArrayBox>* >& a_calvedIce,
+   Vector<LevelData<FArrayBox>* >& a_addedIce,
+   Vector<LevelData<FArrayBox>* >& a_removedIce,
+   Real& a_initialResidualNorm, 
+   Real& a_finalResidualNorm,
+   const Real a_convergenceMetric,
+   const Vector<LevelData<FArrayBox>* >& a_rhs,
+   const Vector<LevelData<FArrayBox>* >& a_beta,  // Basal C (a_beta)
+   const Vector<LevelData<FArrayBox>* >& a_beta0, // not used
+   const Vector<LevelData<FArrayBox>* >& a_A,
+   const Vector<LevelData<FluxBox>* >& a_muCoef,  // not used, this is computed
+   Vector<RefCountedPtr<LevelSigmaCS > >& a_coordSys,
+   Real a_time,
+   int a_lbase, 
+   int a_maxLevel
+   )
+**/
 {
   CH_TIME("FASIceSolver::solve");
 
   // copy data into ops, acting like a factory ...
-  FASIceViscouseTensorOp *crs_op = 0, *op;
+  FASIceViscousTensorOp *crs_op = 0, *op;
   for (int lev = 0; lev < a_maxLevel + 1; ++lev, crs_op = op )
+  {
+    op = dynamic_cast<FASIceViscousTensorOp*>( &(*getOp(lev)) );
+    CH_assert(op);
+
+    if( !op->m_faceA )
     {
-      op = dynamic_cast<FASIceViscouseTensorOp*>( &(*getOp(lev)) );
-      CH_assert(op);
-
-      if( !op->m_faceA )
-	{
-	  op->m_faceA = RefCountedPtr<LevelData<FluxBox> >(new LevelData<FluxBox>( op->m_grid,
-	  									   a_A[lev]->nComp(),
-	  									   IntVect::Zero) );
-	}
-      //
-      LevelData<FArrayBox>& argA = *a_A[lev];
-      CellToEdge( argA, *op->m_faceA );
-
-      // copy beta into local storage computed for coarse grids in callback in solver
-      LevelData<FArrayBox>& localBeta = *op->m_Beta;
-      LevelData<FArrayBox>& argBeta =   *a_beta[lev];
-      LevelData<FArrayBox>& localBeta0 = *op->m_Beta0;
-      LevelData<FArrayBox>& argBeta0 =   *a_beta0[lev];
-      CH_assert(localBeta.nComp() == argBeta.nComp());
-
-      DataIterator dit = localBeta.dataIterator();
-      for (dit.begin(); dit.ok(); ++dit)
-        {
-          localBeta[dit].copy(argBeta[dit]);
-          localBeta0[dit].copy(argBeta0[dit]);
-        }
-      
-      // cache args
-      op->m_time = a_time;
-      op->m_coordSys = a_coordSys[lev];
+      op->m_faceA = RefCountedPtr<LevelData<FluxBox> >(new LevelData<FluxBox>( op->m_grid,
+                                                                               a_A[lev]->nComp(),
+                                                                               IntVect::Zero) );
     }
+    //
+    LevelData<FArrayBox>& argA = *a_A[lev];
+    CellToEdge( argA, *op->m_faceA );
+
+    // copy beta into local storage computed for coarse grids in callback in solver
+    LevelData<FArrayBox>& localBeta = *op->m_Beta;
+    LevelData<FArrayBox>& argBeta =   *a_beta[lev];
+    LevelData<FArrayBox>& localBeta0 = *op->m_Beta0;
+    LevelData<FArrayBox>& argBeta0 =   *a_beta0[lev];
+    CH_assert(localBeta.nComp() == argBeta.nComp());
+
+    DataIterator dit = localBeta.dataIterator();
+    for (dit.begin(); dit.ok(); ++dit)
+    {
+      localBeta[dit].copy(argBeta[dit]);
+      localBeta0[dit].copy(argBeta0[dit]);
+    }
+      
+    // cache args
+    op->m_time = a_time;
+    op->m_coordSys = a_coordSys[lev];
+  }
   // solver will copy internal levels
 
   // solver wants RefCountedPtr, allocate and copy in, and strips out extra levels
   Vector<RefCountedPtr<LevelData<FArrayBox> > > phi(a_maxLevel + 1);
   Vector<RefCountedPtr<LevelData<FArrayBox> > > rhs(a_maxLevel + 1);
   for (int lev = 0; lev < a_maxLevel + 1; ++lev)
-    { 
-      phi[lev] = RefCountedPtr<LevelData<FArrayBox> >(new LevelData<FArrayBox>);
-      rhs[lev] = RefCountedPtr<LevelData<FArrayBox> >(new LevelData<FArrayBox>);
+  { 
+    phi[lev] = RefCountedPtr<LevelData<FArrayBox> >(new LevelData<FArrayBox>);
+    rhs[lev] = RefCountedPtr<LevelData<FArrayBox> >(new LevelData<FArrayBox>);
 
-      op = dynamic_cast<FASIceViscouseTensorOp*>( &(*getOp(lev)) );
-      CH_assert(op);
+    op = dynamic_cast<FASIceViscousTensorOp*>( &(*getOp(lev)) );
+    CH_assert(op);
 
-      phi[lev]->define( op->m_grid, a_horizontalVel[0]->nComp(), a_horizontalVel[0]->ghostVect() ); 
-      op->assignLocal( *phi[lev], *a_horizontalVel[lev] );
-      rhs[lev]->define( op->m_grid, a_rhs[0]->nComp(), IntVect::Zero );
-      op->assignLocal( *rhs[lev], *a_rhs[lev] );
-    }
+    phi[lev]->define( op->m_grid, a_horizontalVel[0]->nComp(), a_horizontalVel[0]->ghostVect() ); 
+    op->assignLocal( *phi[lev], *a_horizontalVel[lev] );
+    rhs[lev]->define( op->m_grid, a_rhs[0]->nComp(), IntVect::Zero );
+    op->assignLocal( *rhs[lev], *a_rhs[lev] );
+  }
 
   // solve -- should we zero out vel?
   int returnCode;
@@ -474,52 +490,52 @@ FASIceSolver::solve( Vector<LevelData<FArrayBox>* >& a_horizontalVel,
 
   // copy out
   for (int lev = 0; lev < a_maxLevel + 1; ++lev)
-    {
-      op = dynamic_cast<FASIceViscouseTensorOp*>( &(*getOp(lev)) );
-      CH_assert(op);
-      op->assignLocal( *a_horizontalVel[lev], *phi[lev] );
-    }
+  {
+    op = dynamic_cast<FASIceViscousTensorOp*>( &(*getOp(lev)) );
+    CH_assert(op);
+    op->assignLocal( *a_horizontalVel[lev], *phi[lev] );
+  }
   
   if( !m_avoid_norms && m_plot_residual )
-    {
+  {
 #ifdef CH_USE_HDF5
-      string fname = "residualFAS.";
-      char suffix[30];
-      sprintf(suffix, "%dd.hdf5",SpaceDim);
-      fname += suffix;
+    string fname = "residualFAS.";
+    char suffix[30];
+    sprintf(suffix, "%dd.hdf5",SpaceDim);
+    fname += suffix;
       
-      Vector<string> varNames(SpaceDim);
-      varNames[0] = "residual-x";
-      varNames[1] = "residual-y";
+    Vector<string> varNames(SpaceDim);
+    varNames[0] = "residual-x";
+    varNames[1] = "residual-y";
 
-      Real bogusVal = 1.0;
-      // writes all grids
-      if( 0 )
-	{
-	  op = dynamic_cast<FASIceViscouseTensorOp*>( &(*getOp(a_maxLevel)) );
-	  Real n1 = op->norm( *phi[a_maxLevel], 0, 0);
-	  Real n2 = op->norm( *phi[a_maxLevel], 0, 1);
-	  pout() << "FASIceSolver::solve plot residual " << m_residual.size() << " levels, |phi_x|= " << setprecision(15) << n1 << " |phi_y|= " << n2 << endl;
-	}
-
-      Vector<LevelData<FArrayBox>*> res( m_residual.size() );
-      for (int lev = 0; lev < m_residual.size() ; ++lev)
-	{ 
-	  res[lev] = &(*m_temp[lev]); // residual happens to be in m_temp
-	}
-
-      WriteAMRHierarchyHDF5(fname,
-			    m_opFactoryPtr->m_grids,
-			    res,
-			    varNames,
-			    m_op[0]->m_domain.domainBox(),
-			    m_op[0]->dx(),
-			    bogusVal,
-			    bogusVal,
-			    m_opFactoryPtr->m_refRatios,
-			    m_residual.size());
-#endif // end if HDF5
+    Real bogusVal = 1.0;
+    // writes all grids
+    if( 0 )
+    {
+      op = dynamic_cast<FASIceViscousTensorOp*>( &(*getOp(a_maxLevel)) );
+      Real n1 = op->norm( *phi[a_maxLevel], 0, 0);
+      Real n2 = op->norm( *phi[a_maxLevel], 0, 1);
+      pout() << "FASIceSolver::solve plot residual " << m_residual.size() << " levels, |phi_x|= " << setprecision(15) << n1 << " |phi_y|= " << n2 << endl;
     }
+
+    Vector<LevelData<FArrayBox>*> res( m_residual.size() );
+    for (int lev = 0; lev < m_residual.size() ; ++lev)
+    { 
+      res[lev] = &(*m_temp[lev]); // residual happens to be in m_temp
+    }
+
+    WriteAMRHierarchyHDF5(fname,
+                          m_opFactoryPtr->m_grids,
+                          res,
+                          varNames,
+                          m_op[0]->m_domain.domainBox(),
+                          m_op[0]->dx(),
+                          bogusVal,
+                          bogusVal,
+                          m_opFactoryPtr->m_refRatios,
+                          m_residual.size());
+#endif // end if HDF5
+  }
 
   return returnCode;
 }
@@ -529,10 +545,10 @@ FASIceSolver::solve( Vector<LevelData<FArrayBox>* >& a_horizontalVel,
 // side effect: does exchange on a_horizontalVel (otherwise it should be const)
 //
 void 
-FASIceViscouseTensorOp::computeMu( LevelData<FArrayBox>& a_horizontalVel,
-				   const LevelData<FArrayBox>* a_crsVel,
-				   const LevelData<FArrayBox>* a_fineVel
-				   )
+FASIceViscousTensorOp::computeMu( LevelData<FArrayBox>& a_horizontalVel,
+                                  const LevelData<FArrayBox>* a_crsVel,
+                                  const LevelData<FArrayBox>* a_fineVel
+  )
 { 
   const DisjointBoxLayout& levelGrids =    m_grid;
   const LevelSigmaCS&      levelCS =      *m_coordSys;
@@ -545,14 +561,14 @@ FASIceViscouseTensorOp::computeMu( LevelData<FArrayBox>& a_horizontalVel,
   LevelData<FArrayBox>&    levelC =       *m_VTO->getACoef(); // not intuitive: VTO acoef == solver C
 
   if (a_fineVel)
-    {
-      CoarseAverage averager(a_fineVel->getBoxes(),
-  			     levelGrids,
-  			     a_fineVel->nComp(),
-			     refToFiner());
+  {
+    CoarseAverage averager(a_fineVel->getBoxes(),
+                           levelGrids,
+                           a_fineVel->nComp(),
+                           refToFiner());
       
-      averager.averageToCoarse(levelVel, *a_fineVel);
-    }
+    averager.averageToCoarse(levelVel, *a_fineVel);
+  }
 
   levelVel.exchange( m_exchangeCopier );
 
@@ -600,43 +616,43 @@ FASIceViscouseTensorOp::computeMu( LevelData<FArrayBox>& a_horizontalVel,
   // Real muMax = 1.23456789e+300;
   // Real muMin = 0.0;
   for (dit.begin(); dit.ok(); ++dit)
+  {
+
+    for (int dir=0; dir<SpaceDim; dir++)
     {
+      FArrayBox& thisMu = levelMu[dit][dir];
+      const Box& box = thisMu.box();
 
-      for (int dir=0; dir<SpaceDim; dir++)
-	{
-	  FArrayBox& thisMu = levelMu[dit][dir];
-	  const Box& box = thisMu.box();
+      // FORT_MAXFAB1(CHF_FRA(thisMu),
+      // 	       CHF_CONST_REAL(muMin),
+      // 	       CHF_BOX(box));
 
-	  // FORT_MAXFAB1(CHF_FRA(thisMu),
-	  // 	       CHF_CONST_REAL(muMin),
-	  // 	       CHF_BOX(box));
-
-	  thisMu.mult(faceH[dit][dir],box,0,0,1);
-	  CH_assert(thisMu.min() >= 0.0);
+      thisMu.mult(faceH[dit][dir],box,0,0,1);
+      CH_assert(thisMu.min() >= 0.0);
 	  
-	  // FORT_MINFAB1(CHF_FRA(thisMu),
-	  // 	       CHF_CONST_REAL(muMax),
-	  // 	       CHF_BOX(box));
-	}
+      // FORT_MINFAB1(CHF_FRA(thisMu),
+      // 	       CHF_CONST_REAL(muMax),
+      // 	       CHF_BOX(box));
+    }
 
-      // also update alpha (or C)
-      const Box& gridBox = levelGrids[dit];
-      {
-        FArrayBox       & t_alpha    = levelC[dit];
-        const FArrayBox & t_basalVel = levelVel[dit];
-        const FArrayBox & t_C        = levelCS.getThicknessOverFlotation()[dit];
-        Real scale = 1.; //dtg
-        int  ilevel = 0; //dtg ?
-        m_basalFrictionRelPtr->computeAlpha(t_alpha,
-                                            t_basalVel,
-                                            t_C,scale,
-                                            levelCS,
-                                            dit,
-                                            ilevel,
-                                            gridBox);
-      }
+    // also update alpha (or C)
+    const Box& gridBox = levelGrids[dit];
+    {
+      FArrayBox       & t_alpha    = levelC[dit];
+      const FArrayBox & t_basalVel = levelVel[dit];
+      const FArrayBox & t_C        = levelCS.getThicknessOverFlotation()[dit];
+      Real scale = 1.; //dtg
+      int  ilevel = 0; //dtg ?
+      m_basalFrictionRelPtr->computeAlpha(t_alpha,
+                                          t_basalVel,
+                                          t_C,scale,
+                                          levelCS,
+                                          dit,
+                                          ilevel,
+                                          gridBox);
+    }
 
-      levelC[dit] += levelBeta0[dit];
+    levelC[dit] += levelBeta0[dit];
 
 // #if CH_SPACEDIM==2
 //       {
@@ -654,14 +670,14 @@ FASIceViscouseTensorOp::computeMu( LevelData<FArrayBox>& a_horizontalVel,
 //       }
 // #endif
 
-      // lambda = 2*mu
-      FluxBox& lambda = levelLambda[dit];
-      for (int dir=0; dir<SpaceDim; dir++)
-	{
-	  lambda[dir].copy(levelMu[dit][dir]);
-	  lambda[dir] *= 2.0;
-	}
+    // lambda = 2*mu
+    FluxBox& lambda = levelLambda[dit];
+    for (int dir=0; dir<SpaceDim; dir++)
+    {
+      lambda[dir].copy(levelMu[dit][dir]);
+      lambda[dir] *= 2.0;
     }
+  }
 }
 
 #include "NamespaceFooter.H"
