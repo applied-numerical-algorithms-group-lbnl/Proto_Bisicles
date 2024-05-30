@@ -603,14 +603,15 @@ c
       a1 = pts(1)
       if(npts.eq.0) go to 40
       nintp1 = nint+1
-      do 20 i = 1,nint
+      do 25 i = 1,nint
         ip1 = i+1
         do 20 j = ip1,nintp1
           if(pts(i).le.pts(j)) go to 20
           temp = pts(i)
           pts(i) = pts(j)
           pts(j) = temp
-   20 continue
+ 20    continue
+ 25   continue       
       if(pts(1).ne.dmin1(a,b).or.pts(nintp1).ne.dmax1(a,b)) ier = 6
       if(ier.eq.6) go to 999
 c
