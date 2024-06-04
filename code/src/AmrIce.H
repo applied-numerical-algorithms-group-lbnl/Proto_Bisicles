@@ -420,6 +420,7 @@ public:
 			FASMGAMR = 4,
 			Python = 5,
 			InverseVerticallyIntegrated = 6,
+			Proto_FASMGAMR = 7,
                         NUM_SOLVER_TYPES};
 
   void setTime(Real a_time)
