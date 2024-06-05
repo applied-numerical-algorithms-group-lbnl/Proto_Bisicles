@@ -483,7 +483,7 @@ HumpIBC::initializeIceGeometry(LevelSigmaCS& a_coords,
           Real phi = 0.5*Pi*(radSqr/m_radSqr);
           if (phi < Pi)
             {
-              thickness = max(m_maxThickness*cos(phi),0.0);
+              thickness = std::max(m_maxThickness*cos(phi),0.0);
             }
           else 
             {

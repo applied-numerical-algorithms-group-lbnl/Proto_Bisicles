@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
 #endif 
 #endif // end petsc conditional
 
-  FineInterp::s_default_boundary_limit_type = 0;
+  Chombo::FineInterp::s_default_boundary_limit_type = 0;
 
   { // Begin nested scope
 
@@ -113,30 +113,30 @@ int main(int argc, char* argv[]) {
     
 
     
-    ParmParse pp(argc-2,argv+2,NULL,in_file);
-    ParmParse pp2("main");
+    CH_XD::ParmParse pp(argc-2,argv+2,NULL,in_file);
+    CH_XD::ParmParse pp2("main");
 
     std::string poutBaseName = "pout";
     pp2.query("poutBaseName",poutBaseName);
-    setPoutBaseName(poutBaseName);
+    CH_XD::setPoutBaseName(poutBaseName);
     //make use of number_procs and rank for at least something.
-    pout() << "number_procs = " << number_procs << ", rank = " << rank << std::endl;
+    CH_XD::pout() << "number_procs = " << number_procs << ", rank = " << rank << std::endl;
 
     
-    RealVect domainSize;
-    Vector<Real> domSize(SpaceDim);
-    pp2.getarr("domain_size", domSize, 0, SpaceDim);
-    domainSize = RealVect(D_DECL(domSize[0], domSize[1], domSize[2]));
+    Chombo::RealVect domainSize;
+    Chombo::Vector<Real> domSize(Chombo::SpaceDim);
+    pp2.getarr("domain_size", domSize, 0, Chombo::SpaceDim);
+    domainSize = Chombo::RealVect(D_DECL(domSize[0], domSize[1], domSize[2]));
 
 
-    AmrIce amrObject;
+    Chombo::AmrIce amrObject;
     // ---------------------------------------------
     // set constitutive relation & rate factor
     // ---------------------------------------------
 
     Real seconds_per_unit_time = SECONDS_PER_TROPICAL_YEAR;
     {
-      ParmParse ppc("constants");
+      CH_XD::ParmParse ppc("constants");
       ppc.query("seconds_per_unit_time",seconds_per_unit_time);
     }
     
@@ -144,36 +144,36 @@ int main(int argc, char* argv[]) {
     pp2.query("rateFactor", rateFactorType);
     if (rateFactorType == "constRate")
       {
-	ParmParse crPP("constRate");
+        CH_XD::ParmParse crPP("constRate");
 	Real A = 9.2e-18 * seconds_per_unit_time/SECONDS_PER_TROPICAL_YEAR;
 	crPP.query("A", A);
-	ConstantRateFactor rateFactor(A);
+        Chombo::ConstantRateFactor rateFactor(A);
 	amrObject.setRateFactor(&rateFactor);
       }
     else if (rateFactorType == "arrheniusRate")
       {
-	ArrheniusRateFactor rateFactor(seconds_per_unit_time);
-	ParmParse arPP("ArrheniusRate");
+	Chombo::ArrheniusRateFactor rateFactor(seconds_per_unit_time);
+	CH_XD::ParmParse arPP("ArrheniusRate");
 	amrObject.setRateFactor(&rateFactor);
       }
     else if (rateFactorType == "patersonRate")
       {
-	PatersonRateFactor rateFactor(seconds_per_unit_time);
-	ParmParse arPP("PatersonRate");
+	Chombo::PatersonRateFactor rateFactor(seconds_per_unit_time);
+	CH_XD::ParmParse arPP("PatersonRate");
 	amrObject.setRateFactor(&rateFactor);
       }
     else if (rateFactorType == "zwingerRate")
       {
-	ZwingerRateFactor rateFactor(seconds_per_unit_time);
-	ParmParse arPP("ZwingerRate");
+	Chombo::ZwingerRateFactor rateFactor(seconds_per_unit_time);
+	CH_XD::ParmParse arPP("ZwingerRate");
 	amrObject.setRateFactor(&rateFactor);
       }
 
-    ConstitutiveRelation* constRelPtr = ConstitutiveRelation::parse("main");
+    Chombo::ConstitutiveRelation* constRelPtr = Chombo::ConstitutiveRelation::parse("main");
 
     if (constRelPtr == NULL)
       {
-	MayDay::Error("undefined constitutiveRelation in inputs");
+	Chombo::MayDay::Error("undefined constitutiveRelation in inputs");
       }
 
     amrObject.setConstitutiveRelation(constRelPtr);
@@ -183,7 +183,7 @@ int main(int argc, char* argv[]) {
     
     if (basalRateFactorType == "patersonRate")
       {
-	PatersonRateFactor rateFactor(seconds_per_unit_time);
+	Chombo::PatersonRateFactor rateFactor(seconds_per_unit_time);
 	rateFactor.setA0(1.0);
 	amrObject.setBasalRateFactor(&rateFactor);
       }
@@ -192,12 +192,12 @@ int main(int argc, char* argv[]) {
     // set surface flux. 
     // ---------------------------------------------
 
-    SurfaceFlux* surf_flux_ptr = SurfaceFlux::parse("surfaceFlux");
+    Chombo::SurfaceFlux* surf_flux_ptr = Chombo::SurfaceFlux::parse("surfaceFlux");
     if (surf_flux_ptr == NULL)
       {
 	const std::string err("failed to parse surfaceFlux (maybe you have the old style surface_flux_type?");
-	pout() << err << endl;
-	MayDay::Error(err.c_str());
+	Chombo::pout() << err << endl;
+	Chombo::MayDay::Error(err.c_str());
       }
 
     amrObject.setSurfaceFlux(surf_flux_ptr);
@@ -206,12 +206,12 @@ int main(int argc, char* argv[]) {
     // set basal (lower surface) flux. 
     // ---------------------------------------------
     
-    SurfaceFlux* basal_flux_ptr = SurfaceFlux::parse("basalFlux");
+    Chombo::SurfaceFlux* basal_flux_ptr = Chombo::SurfaceFlux::parse("basalFlux");
     if (basal_flux_ptr == NULL)
       {
 	const std::string err("failed to parse basalFlux (maybe you have the old style basal_flux_type?");
-	pout() << err << endl;
-	MayDay::Error(err.c_str());
+	Chombo::pout() << err << endl;
+	Chombo::MayDay::Error(err.c_str());
       }
 
     amrObject.setBasalFlux(basal_flux_ptr); 
@@ -220,10 +220,10 @@ int main(int argc, char* argv[]) {
     // set topography (bedrock) flux. 
     // ---------------------------------------------
     
-    SurfaceFlux* topg_flux_ptr = SurfaceFlux::parse("topographyFlux");
+    Chombo::SurfaceFlux* topg_flux_ptr = Chombo::SurfaceFlux::parse("topographyFlux");
     if (topg_flux_ptr == NULL)
       {
-	topg_flux_ptr = new zeroFlux();
+	topg_flux_ptr = new Chombo::zeroFlux();
       }
     amrObject.setTopographyFlux(topg_flux_ptr); 
 
@@ -231,13 +231,13 @@ int main(int argc, char* argv[]) {
     // set mu coefficient
     // ---------------------------------------------
     {
-      MuCoefficient* muCoefPtr =  MuCoefficient::parseMuCoefficient("muCoefficient");
+      Chombo::MuCoefficient* muCoefPtr =  Chombo::MuCoefficient::parseMuCoefficient("muCoefficient");
 
       if (muCoefPtr == NULL)
 	{
 	  const std::string err("failed to parse muCoefficient");
-	  pout() << err << endl;
-	  MayDay::Error(err.c_str());
+	  Chombo::pout() << err << endl;
+	  Chombo::MayDay::Error(err.c_str());
 	}
      
       amrObject.setMuCoefficient(muCoefPtr);
@@ -248,20 +248,20 @@ int main(int argc, char* argv[]) {
     // set basal friction coefficient and relation
     // ---------------------------------------------
 
-    ParmParse geomPP("geometry");
+    CH_XD::ParmParse geomPP("geometry");
     
-    BasalFriction* basalFrictionPtr 
-      = BasalFriction::parse("geometry", domainSize);
+    Chombo::BasalFriction* basalFrictionPtr 
+      = Chombo::BasalFriction::parse("geometry", domainSize);
     
     if (basalFrictionPtr == NULL)
       {
-	MayDay::Error("undefined  geometry.beta_type in inputs");
+	Chombo::MayDay::Error("undefined  geometry.beta_type in inputs");
       }
     
     amrObject.setBasalFriction(basalFrictionPtr);
     
-    BasalFrictionRelation* basalFrictionRelationPtr 
-      = BasalFrictionRelation::parse("main",0);
+    Chombo::BasalFrictionRelation* basalFrictionRelationPtr 
+      = Chombo::BasalFrictionRelation::parse("main",0);
 
     amrObject.setBasalFrictionRelation(basalFrictionRelationPtr);
 
@@ -271,40 +271,40 @@ int main(int argc, char* argv[]) {
     // ---------------------------------------------
 
     
-    IceThicknessIBC* thicknessIBC = NULL;
+    Chombo::IceThicknessIBC* thicknessIBC = NULL;
 
     std::string problem_type;
     geomPP.get("problem_type", problem_type);
     if (problem_type == "basic")
       {
-        thicknessIBC = new BasicThicknessIBC;
+        thicknessIBC = new Chombo::BasicThicknessIBC;
       }
     else if (problem_type == "VieliPayne")
       {
-        VieliPayneIBC* ibcPtr = new VieliPayneIBC;
-        ParmParse pvPP("vieliPayne");
+        Chombo::VieliPayneIBC* ibcPtr = new Chombo::VieliPayneIBC;
+        CH_XD::ParmParse pvPP("vieliPayne");
 
         Real thickness, seaLevel, originElevation;
-        RealVect basalSlope;
+        Chombo::RealVect basalSlope;
         pvPP.get("thickness", thickness);
         seaLevel = 0.0;
         pvPP.query("seaLevel", seaLevel);
         
-        Vector<Real> vect(SpaceDim);
-        pvPP.getarr("basal_slope", vect, 0, SpaceDim);
-        basalSlope = RealVect(D_DECL(vect[0], vect[1], vect[2]));
+        Chombo::Vector<Real> vect(Chombo::SpaceDim);
+        pvPP.getarr("basal_slope", vect, 0, Chombo::SpaceDim);
+        basalSlope = Chombo::RealVect(D_DECL(vect[0], vect[1], vect[2]));
 
         pvPP.get("originElevation", originElevation);
 
         ibcPtr->setParameters(thickness, basalSlope, 
                               originElevation, seaLevel);       
 
-        thicknessIBC = static_cast<IceThicknessIBC*>(ibcPtr);
+        thicknessIBC = static_cast<Chombo::IceThicknessIBC*>(ibcPtr);
       }
      else if (problem_type == "marineIceSheet")
       {
-        MarineIBC* ibcPtr = new MarineIBC;
-        ParmParse mPP("marineIceSheet");
+        Chombo::MarineIBC* ibcPtr = new Chombo::MarineIBC;
+        CH_XD::ParmParse mPP("marineIceSheet");
 	
 	Real  seaLevel;
 	seaLevel = 0.0;
@@ -312,55 +312,55 @@ int main(int argc, char* argv[]) {
 
 	std::string thicknessType = "constant";
 	mPP.query("thickness_type",thicknessType);
-	RefCountedPtr<RealFunction<RealVect> > thicknessFunction;
-	Vector<RefCountedPtr<RealFunction<RealVect> > > bedrockFunction(1);
+	Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > thicknessFunction;
+	Chombo::Vector<Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > > bedrockFunction(1);
 	if (thicknessType == "constant")
 	  {
 	    Real thickness;
 	    mPP.get("thickness", thickness);
-	    RefCountedPtr<RealFunction<RealVect> > ptr(new ConstantRealFunction<RealVect>(thickness));
+	    Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr(new Chombo::ConstantRealFunction<Chombo::RealVect>(thickness));
 	    thicknessFunction =ptr;
 	  }
         else if (thicknessType == "compactSupportConstant")
           {
 	    Real thickness;
-            Vector<Real> tmpIntVect(SpaceDim,0); 
+            Chombo::Vector<Real> tmpIntVect(Chombo::SpaceDim,0); 
 	    mPP.get("thickness", thickness);
-            mPP.getarr("loBound", tmpIntVect, 0, SpaceDim);
-            RealVect loBound(D_DECL(tmpIntVect[0], tmpIntVect[1], tmpIntVect[2]));
-            mPP.getarr("hiBound", tmpIntVect, 0, SpaceDim);
-            RealVect hiBound(D_DECL(tmpIntVect[0], tmpIntVect[1], tmpIntVect[2]));
+            mPP.getarr("loBound", tmpIntVect, 0, Chombo::SpaceDim);
+            Chombo::RealVect loBound(D_DECL(tmpIntVect[0], tmpIntVect[1], tmpIntVect[2]));
+            mPP.getarr("hiBound", tmpIntVect, 0, Chombo::SpaceDim);
+            Chombo::RealVect hiBound(D_DECL(tmpIntVect[0], tmpIntVect[1], tmpIntVect[2]));
 
-	    RefCountedPtr<RealFunction<RealVect> > ptr(new CompactSupportConstantRealFunction(thickness,loBound, hiBound));
+	    Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr(new Chombo::CompactSupportConstantRealFunction(thickness,loBound, hiBound));
 	    thicknessFunction =ptr;
 
           }
         else if (thicknessType == "circularSupportConstant")
           {
 	    Real thickness, supportRadius;
-            Vector<Real> tmpRealVect(SpaceDim,0); 
+            Chombo::Vector<Real> tmpRealVect(Chombo::SpaceDim,0); 
 	    mPP.get("thickness", thickness);
             mPP.get("supportRadius", supportRadius);
-            mPP.getarr("center", tmpRealVect, 0, SpaceDim);
-            RealVect center(D_DECL(tmpRealVect[0],tmpRealVect[1],tmpRealVect[2]));
+            mPP.getarr("center", tmpRealVect, 0, Chombo::SpaceDim);
+            Chombo::RealVect center(D_DECL(tmpRealVect[0],tmpRealVect[1],tmpRealVect[2]));
 
-	    RefCountedPtr<RealFunction<RealVect> > ptr(new CircularSupportConstantRealFunction(thickness,center, supportRadius));
+	    Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr(new Chombo::CircularSupportConstantRealFunction(thickness,center, supportRadius));
 	    thicknessFunction =ptr;            
           }
         else if (thicknessType == "compactSupportInclinedPlane")
           {
 	    Real originThickness;
-            Vector<Real> tmpIntVect(SpaceDim,0); 
+            Chombo::Vector<Real> tmpIntVect(Chombo::SpaceDim,0); 
 	    mPP.get("origin_thickness", originThickness);
-            mPP.getarr("loBound", tmpIntVect, 0, SpaceDim);
-            RealVect loBound(D_DECL(tmpIntVect[0], tmpIntVect[1], tmpIntVect[2]));
-            mPP.getarr("hiBound", tmpIntVect, 0, SpaceDim);
-            RealVect hiBound(D_DECL(tmpIntVect[0], tmpIntVect[1], tmpIntVect[2]));
-            RealVect thicknessSlope;
-            Vector<Real> vect(SpaceDim);
-            mPP.getarr("thickness_slope", vect, 0, SpaceDim);
-            thicknessSlope = RealVect(D_DECL(vect[0], vect[1], vect[2]));
-            RefCountedPtr<RealFunction<RealVect> > ptr(new CompactSupportInclinedPlaneFunction(originThickness, thicknessSlope,loBound, hiBound));
+            mPP.getarr("loBound", tmpIntVect, 0, Chombo::SpaceDim);
+            Chombo::RealVect loBound(D_DECL(tmpIntVect[0], tmpIntVect[1], tmpIntVect[2]));
+            mPP.getarr("hiBound", tmpIntVect, 0, Chombo::SpaceDim);
+            Chombo::RealVect hiBound(D_DECL(tmpIntVect[0], tmpIntVect[1], tmpIntVect[2]));
+            Chombo::RealVect thicknessSlope;
+            Chombo::Vector<Real> vect(Chombo::SpaceDim);
+            mPP.getarr("thickness_slope", vect, 0, Chombo::SpaceDim);
+            thicknessSlope = Chombo::RealVect(D_DECL(vect[0], vect[1], vect[2]));
+            Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr(new Chombo::CompactSupportInclinedPlaneFunction(originThickness, thicknessSlope,loBound, hiBound));
 	    thicknessFunction =ptr;
             
           }
@@ -373,7 +373,7 @@ int main(int argc, char* argv[]) {
 	    mPP.get("x_cutoff", cutoff);
             mPP.query("dir", dir);
 
-	    RefCountedPtr<RealFunction<RealVect> > ptr(new StepRealFunction(leftThickness, rightThickness, cutoff, dir));
+	    Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr(new Chombo::StepRealFunction(leftThickness, rightThickness, cutoff, dir));
 	    thicknessFunction =ptr;
 	  }
 	else if (thicknessType == "flowline")
@@ -383,12 +383,12 @@ int main(int argc, char* argv[]) {
 	    mPP.get("thickness_flowline_dx", dx);
 	    mPP.get("thickness_flowline_file", file);
 	    mPP.get("thickness_flowline_set", set);
-	    RefCountedPtr<RealFunction<RealVect> > ptr(new ExtrudedPieceWiseLinearFlowline(file,set,dx));
+	    Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr(new Chombo::ExtrudedPieceWiseLinearFlowline(file,set,dx));
 	    thicknessFunction = ptr;
 	  }
 	else 
 	  {
-	    MayDay::Error("bad marineIceSheet.thicknessType");
+	    Chombo::MayDay::Error("bad marineIceSheet.thicknessType");
 	  }
 
 	
@@ -398,46 +398,46 @@ int main(int argc, char* argv[]) {
 	if (geometry == "plane")
 	  {
 	    //inclined plane geometry
-	    RealVect basalSlope;
-	    Vector<Real> vect(SpaceDim);
-	    mPP.getarr("basal_slope", vect, 0, SpaceDim);
-	    basalSlope = RealVect(D_DECL(vect[0], vect[1], vect[2]));
+	    Chombo::RealVect basalSlope;
+	    Chombo::Vector<Real> vect(Chombo::SpaceDim);
+	    mPP.getarr("basal_slope", vect, 0, Chombo::SpaceDim);
+	    basalSlope = Chombo::RealVect(D_DECL(vect[0], vect[1], vect[2]));
 	    Real originElevation;
 	    mPP.get("originElevation", originElevation);
 
 	   
-	    RefCountedPtr<RealFunction<RealVect> > ptr(new InclinedPlaneFunction(originElevation, basalSlope));
+	    Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr(new Chombo::InclinedPlaneFunction(originElevation, basalSlope));
 	    bedrockFunction[0] =  ptr;
 	  }
 	else if (geometry == "symmetricPlane")
 	  {
 	    //inclined plane geometry, symmetric about origin
-	    RealVect basalSlope;
-	    Vector<Real> vect(SpaceDim);
-	    mPP.getarr("basal_slope", vect, 0, SpaceDim);
-	    basalSlope = RealVect(D_DECL(vect[0], vect[1], vect[2]));
+	    Chombo::RealVect basalSlope;
+	    Chombo::Vector<Real> vect(Chombo::SpaceDim);
+	    mPP.getarr("basal_slope", vect, 0, Chombo::SpaceDim);
+	    basalSlope = Chombo::RealVect(D_DECL(vect[0], vect[1], vect[2]));
 
 	    Real originElevation;
 	    mPP.get("originElevation", originElevation);
 
-            RealVect symmetryPoint(RealVect::Zero);
-            mPP.getarr("symmetryPoint", vect, 0, SpaceDim);
-            symmetryPoint = RealVect(D_DECL(vect[0], vect[1], vect[2]));
+            Chombo::RealVect symmetryPoint(Chombo::RealVect::Zero);
+            mPP.getarr("symmetryPoint", vect, 0, Chombo::SpaceDim);
+            symmetryPoint = Chombo::RealVect(D_DECL(vect[0], vect[1], vect[2]));
 	   
-	    RefCountedPtr<RealFunction<RealVect> > ptr(new SymmetricInclinedPlaneFunction(originElevation, basalSlope, symmetryPoint));
+	    Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr(new Chombo::SymmetricInclinedPlaneFunction(originElevation, basalSlope, symmetryPoint));
 	    bedrockFunction[0] =  ptr;
 	  }
 	else if (geometry == "gaussianHump")
 	  {
 	    //gaussian bedrock geometry, symmetric about origin
-	    RealVect center;
-	    Vector<Real> vect(SpaceDim);
-	    mPP.getarr("center", vect, 0, SpaceDim);
-	    center = RealVect(D_DECL(vect[0], vect[1], vect[2]));
+	    Chombo::RealVect center;
+	    Chombo::Vector<Real> vect(Chombo::SpaceDim);
+	    mPP.getarr("center", vect, 0, Chombo::SpaceDim);
+	    center = Chombo::RealVect(D_DECL(vect[0], vect[1], vect[2]));
 
-	    RealVect radius;
-	    mPP.getarr("radius", vect, 0, SpaceDim);
-	    radius = RealVect(D_DECL(vect[0], vect[1], vect[2]));            
+	    Chombo::RealVect radius;
+	    mPP.getarr("radius", vect, 0, Chombo::SpaceDim);
+	    radius = Chombo::RealVect(D_DECL(vect[0], vect[1], vect[2]));            
 
 	    Real magnitude;
 	    mPP.get("magnitude", magnitude);
@@ -445,7 +445,7 @@ int main(int argc, char* argv[]) {
             Real offset;
 	    mPP.get("offset", offset);
 
-	    RefCountedPtr<RealFunction<RealVect> > ptr(new GaussianFunction(center,
+	    Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr(new Chombo::GaussianFunction(center,
                                                                             radius,
                                                                             magnitude,
                                                                             offset));
@@ -456,15 +456,15 @@ int main(int argc, char* argv[]) {
 	    //inclined plane geometry with a Gaussian bump
             bedrockFunction.resize(2);
 
-	    RealVect basalSlope;
-	    Vector<Real> vect(SpaceDim);
-	    mPP.getarr("basal_slope", vect, 0, SpaceDim);
-	    basalSlope = RealVect(D_DECL(vect[0], vect[1], vect[2]));
+	    Chombo::RealVect basalSlope;
+	    Chombo::Vector<Real> vect(Chombo::SpaceDim);
+	    mPP.getarr("basal_slope", vect, 0, Chombo::SpaceDim);
+	    basalSlope = Chombo::RealVect(D_DECL(vect[0], vect[1], vect[2]));
 	    Real originElevation;
 	    mPP.get("originElevation", originElevation);
 
             // compose flat plane with Gaussian hump
-	    RefCountedPtr<RealFunction<RealVect> > ptr1(new InclinedPlaneFunction(originElevation, basalSlope));
+	    Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr1(new Chombo::InclinedPlaneFunction(originElevation, basalSlope));
 	    bedrockFunction[0] =  ptr1;
             
             Real bumpCenter;
@@ -474,7 +474,7 @@ int main(int argc, char* argv[]) {
             mPP.get("bumpCenter", bumpCenter);
             mPP.get("bumpRad", bumpRad);
             mPP.get("bumpMag",bumpMag);
-            RefCountedPtr<RealFunction<RealVect> > ptr2(new GaussianFunctionX(bumpCenter, bumpRad, bumpMag));
+            Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr2(new Chombo::GaussianFunctionX(bumpCenter, bumpRad, bumpMag));
 
 	    bedrockFunction[1] =  ptr2;
           }
@@ -492,9 +492,9 @@ int main(int argc, char* argv[]) {
 	    mPP.get("schoofCoeff2", schoofCoeff2);
 	    mPP.get("schoofCoeff4", schoofCoeff4);
 	    mPP.get("schoofCoeff6", schoofCoeff6);
-	    
-	    //RefCountedPtr<RealFunction<RealVect> > schoofBedrock
-	    RefCountedPtr<RealFunction<RealVect> > ptr(new SchoofBedrockElevation(domainSize[SpaceDim-2] * lengthScaleFactor,
+	    //Great variable name! --dtg
+	    //Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > schoofBedrock
+	    Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr(new Chombo::SchoofBedrockElevation(domainSize[Chombo::SpaceDim-2] * lengthScaleFactor,
 										  originElevation,
 										  schoofCoeff2, schoofCoeff4, 
 										  schoofCoeff6));
@@ -522,9 +522,9 @@ int main(int argc, char* argv[]) {
 	    mPP.get("schoofCoeff4", schoofCoeff4);
 	    mPP.get("schoofCoeff6", schoofCoeff6);
 	    
-	    //RefCountedPtr<RealFunction<RealVect> > katzBedrock
-	    RefCountedPtr<RealFunction<RealVect> > ptr(new KatzBedrockElevation(domainSize[SpaceDim-2],
-										domainSize[SpaceDim-1],
+	    //Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > katzBedrock
+	    Chombo::RefCountedPtr<Chombo::RealFunction<Chombo::RealVect> > ptr(new Chombo::KatzBedrockElevation(domainSize[Chombo::SpaceDim-2],
+										domainSize[Chombo::SpaceDim-1],
 										originElevation,
 										katzAlpha, katzSigma,
 										lengthScaleFactor,
@@ -537,26 +537,26 @@ int main(int argc, char* argv[]) {
 	  }
 	else
 	  {
-	    MayDay::Error("bad marineIceSheet.geometry");
+	    Chombo::MayDay::Error("bad marineIceSheet.geometry");
 	  }
 	
 	ibcPtr->setParameters(thicknessFunction, bedrockFunction ,  seaLevel);
-        thicknessIBC = static_cast<IceThicknessIBC*>(ibcPtr);
+        thicknessIBC = static_cast<Chombo::IceThicknessIBC*>(ibcPtr);
       }
      else if (problem_type == "hump")
        {
-         HumpIBC* ibcPtr = new HumpIBC;
-         ParmParse humpPP("hump");
+         Chombo::HumpIBC* ibcPtr = new Chombo::HumpIBC;
+         CH_XD::ParmParse humpPP("hump");
 
          Real maxThickness, radSqr, baseElevation, minThickness, seaLevel;
-         RealVect center, widthScale;
+         Chombo::RealVect center, widthScale;
          
          // default values to be equivalent to hump in Glimmer-CISM
          radSqr = 0.125*domainSize[0]*domainSize[1];
          maxThickness = 2000.0*pow(radSqr,0.5);
          baseElevation = 0.0;
          minThickness = 0.0;
-         widthScale = RealVect::Unit;
+         widthScale = Chombo::RealVect::Unit;
          // this just lowers the sea level so that it's not relevant...
          seaLevel = -10.0;
          center = 0.5*domainSize;
@@ -567,17 +567,17 @@ int main(int argc, char* argv[]) {
          humpPP.query("minThickness", minThickness);
          if (humpPP.contains("center"))
            {
-             Vector<Real> centerArr(SpaceDim);
-             humpPP.getarr("center", centerArr, 0, SpaceDim);
-             center = RealVect(D_DECL(centerArr[0], centerArr[1], 
+             Chombo::Vector<Real> centerArr(Chombo::SpaceDim);
+             humpPP.getarr("center", centerArr, 0, Chombo::SpaceDim);
+             center = Chombo::RealVect(D_DECL(centerArr[0], centerArr[1], 
                                       centerArr[2]));
            }
 
          if (humpPP.contains("widthScale"))
            {
-             Vector<Real> factorArr(SpaceDim);
-             humpPP.getarr("widthScale", factorArr, 0, SpaceDim);
-             widthScale = RealVect(D_DECL(factorArr[0], factorArr[1], 
+             Chombo::Vector<Real> factorArr(Chombo::SpaceDim);
+             humpPP.getarr("widthScale", factorArr, 0, Chombo::SpaceDim);
+             widthScale = Chombo::RealVect(D_DECL(factorArr[0], factorArr[1], 
                                            factorArr[2]));
            }
 
@@ -589,12 +589,12 @@ int main(int argc, char* argv[]) {
                                seaLevel, 
                                widthScale);
          
-         thicknessIBC = static_cast<IceThicknessIBC*>(ibcPtr);
+         thicknessIBC = static_cast<Chombo::IceThicknessIBC*>(ibcPtr);
        }
      else if (problem_type == "LevelData")
        {
 	 //read geometry from an AMR Hierarchy, store in LevelDataIBC
-	 ParmParse ildPP("inputLevelData");
+	 CH_XD::ParmParse ildPP("inputLevelData");
 	 std::string infile;
 	 ildPP.get("geometryFile",infile);
 	 std::string thicknessName = "thck";
@@ -611,18 +611,18 @@ int main(int argc, char* argv[]) {
          bool setDefaultValues = false;
          ildPP.query("setDefaultValues", setDefaultValues);
          
-	 RefCountedPtr<LevelData<FArrayBox> > levelThck
-	   (new LevelData<FArrayBox>());
-	 RefCountedPtr<LevelData<FArrayBox> > levelTopg
-	   (new LevelData<FArrayBox>());
+	 Chombo::RefCountedPtr<Chombo::LevelData<Chombo::FArrayBox> > levelThck
+	   (new Chombo::LevelData<Chombo::FArrayBox>());
+	 Chombo::RefCountedPtr<Chombo::LevelData<Chombo::FArrayBox> > levelTopg
+	   (new Chombo::LevelData<Chombo::FArrayBox>());
 
 	 Real dx;
 
-	 Vector<RefCountedPtr<LevelData<FArrayBox> > > vectData;
+	 Chombo::Vector<Chombo::RefCountedPtr<Chombo::LevelData<Chombo::FArrayBox> > > vectData;
 	 vectData.push_back(levelThck);
 	 vectData.push_back(levelTopg);
 
-	 Vector<std::string> names(2);
+	 Chombo::Vector<std::string> names(2);
 	 names[0] = thicknessName;
 	 names[1] = topographyName;
 	 readLevelData(vectData,dx,infile,names,1);
@@ -638,16 +638,16 @@ int main(int argc, char* argv[]) {
          
          if (ildPP.contains("clearThicknessRegionsFile"))
            {
-             Vector<Box> clearBoxes;
+             Chombo::Vector<Chombo::Box> clearBoxes;
              std::string clearFile;
              ildPP.get("clearThicknessRegionsFile", clearFile);
              
-             if (procID() == uniqueProc(SerialTask::compute))
+             if (Chombo::procID() == uniqueProc(Chombo::SerialTask::compute))
                {
-                 ifstream is(clearFile.c_str(), ios::in);
+                 std::ifstream is(clearFile.c_str(), std::ios::in);
                  if (is.fail())
                    {
-                     MayDay::Error("Cannot open file with regions for thickness clearing");
+                     Chombo::MayDay::Error("Cannot open file with regions for thickness clearing");
                    }
                  // format of file: number of boxes, then list of boxes.
                  int numRegions;
@@ -660,7 +660,7 @@ int main(int argc, char* argv[]) {
                  
                  for (int i=0; i<numRegions; i++)
                    {
-                     Box bx;
+                     Chombo::Box bx;
                      is >> bx;
                      while (is.get() != '\n');
                      
@@ -669,19 +669,19 @@ int main(int argc, char* argv[]) {
                  
                } // end if serial proc
              // broadcast results
-             broadcast(clearBoxes, uniqueProc(SerialTask::compute));
+             broadcast(clearBoxes, uniqueProc(Chombo::SerialTask::compute));
              
              // now loop over the thickness levelData and set intersections
              // with boxes to zero
              
-             DataIterator dit = levelThck->dataIterator();
+             Chombo::DataIterator dit = levelThck->dataIterator();
              for (dit.begin(); dit.ok(); ++dit)
                {
-                 FArrayBox& thickFab = levelThck->operator[](dit);
-                 const Box& fabBox = thickFab.box();
+                 Chombo::FArrayBox& thickFab = levelThck->operator[](dit);
+                 const Chombo::Box& fabBox = thickFab.box();
                  for (int boxno=0; boxno<clearBoxes.size(); boxno++)
                    {
-                     Box intersectBox(fabBox);
+                     Chombo::Box intersectBox(fabBox);
                      intersectBox &= clearBoxes[boxno];
                      if (!intersectBox.isEmpty())
                        {
@@ -692,18 +692,18 @@ int main(int argc, char* argv[]) {
 
            } // end if we're setting thickness to zero
        
-	 RealVect levelDx = RealVect::Unit * dx;
-	 LevelDataIBC* ptr = new LevelDataIBC(levelThck,levelTopg,levelDx,
+	 Chombo::RealVect levelDx = Chombo::RealVect::Unit * dx;
+	 Chombo::LevelDataIBC* ptr = new Chombo::LevelDataIBC(levelThck,levelTopg,levelDx,
                                               defaultThickness,
                                               defaultTopography,
                                               setDefaultValues
                                               );
-	 thicknessIBC = static_cast<IceThicknessIBC*>( ptr);
+	 thicknessIBC = static_cast<Chombo::IceThicknessIBC*>( ptr);
        }
      else if (problem_type == "MultiLevelData")
        {
 	 //read geometry from an AMR Hierarchy, store in MultiLevelDataIBC
-	 ParmParse ildPP("inputLevelData");
+	 CH_XD::ParmParse ildPP("inputLevelData");
 	 std::string infile;
 	 ildPP.get("geometryFile",infile);
 	 std::string thicknessName = "thck";
@@ -713,26 +713,26 @@ int main(int argc, char* argv[]) {
 	
 	
 	 Real dx;
-	 Vector<Vector<RefCountedPtr<LevelData<FArrayBox> > > > vectData;
+	 Chombo::Vector<Chombo::Vector<Chombo::RefCountedPtr<Chombo::LevelData<Chombo::FArrayBox> > > > vectData;
 	
 
-	 Vector<std::string> names(2);
+	 Chombo::Vector<std::string> names(2);
 	 names[0] = thicknessName;
 	 names[1] = topographyName;
-	 Vector<int> refRatio;
+	 Chombo::Vector<int> refRatio;
 	 readMultiLevelData(vectData,dx,refRatio,infile,names,1);
 	
-	 RealVect crseDx = RealVect::Unit * dx;
-	 MultiLevelDataIBC* ptr = new MultiLevelDataIBC
+	 Chombo::RealVect crseDx = Chombo::RealVect::Unit * dx;
+         Chombo::MultiLevelDataIBC* ptr = new Chombo::MultiLevelDataIBC
 	   (vectData[0],vectData[1],crseDx,refRatio);
-	 thicknessIBC = static_cast<IceThicknessIBC*>( ptr);
+	 thicknessIBC = static_cast<Chombo::IceThicknessIBC*>( ptr);
 
        }
 #ifdef HAVE_PYTHON
      else if (problem_type == "Python")
        {
 	 
-	 ParmParse pyPP("PythonIBC");
+	 CH_XD::ParmParse pyPP("PythonIBC");
 	 std::string module;
 	 pyPP.get("module",module);
 	 std::string thckFuncName = "thickness";
@@ -745,12 +745,12 @@ int main(int argc, char* argv[]) {
 	 pyPP.query("faceVelFunction",faceVelFuncName);
 	 PythonInterface::PythonIBC* ptr = new PythonInterface::PythonIBC
 	   (module, thckFuncName, topgFuncName, rhsFuncName,faceVelFuncName);
-	 thicknessIBC = static_cast<IceThicknessIBC*>( ptr);
+	 thicknessIBC = static_cast<Chombo::IceThicknessIBC*>( ptr);
        }
 #endif
      else 
        {
-         MayDay::Error("bad problem type");
+         Chombo::MayDay::Error("bad problem type");
        }
 
     amrObject.setThicknessBC(thicknessIBC);
@@ -760,8 +760,8 @@ int main(int argc, char* argv[]) {
       // set surface heat boundary data 
       // ---------------------------------------------
 
-      SurfaceFlux* surf_heat_boundary_data_ptr = SurfaceFlux::parse("surfaceHeatBoundaryData");
-      ParmParse pps("surfaceHeatBoundaryData");
+      Chombo::SurfaceFlux* surf_heat_boundary_data_ptr = Chombo::SurfaceFlux::parse("surfaceHeatBoundaryData");
+      CH_XD::ParmParse pps("surfaceHeatBoundaryData");
       bool diri = false; // flux boundary data by default
       pps.query("Dirichlett",diri);
       bool temp = true; //temperature boundary data by default
@@ -771,20 +771,20 @@ int main(int argc, char* argv[]) {
 	  if (diri)
 	    {
 	      const std::string err("If surfaceHeatBoundaryData.Dirichlett = true, surfaceHeatBoundaryData.type must be set");
-	      pout() << err << endl;
-	      MayDay::Error(err.c_str());
+	      Chombo::pout() << err << endl;
+	      Chombo::MayDay::Error(err.c_str());
 	    }
 	  else
 	    {
 	      const std::string warn("No surfaceHeatBoundaryData.type specified, so zero flux set. Only relevant for amr.isothermal = false");
-	      pout() << warn << endl;
+	      Chombo::pout() << warn << endl;
 	      // only warn if we're on processor 0, otherwise we get 
 	      // nproc copies of this warning to stderr
-	      if (procID() == uniqueProc(SerialTask::compute))
+	      if (Chombo::procID() == uniqueProc(Chombo::SerialTask::compute))
 		{
-		  MayDay::Warning(warn.c_str());
+		  Chombo::MayDay::Warning(warn.c_str());
 		}
-	      surf_heat_boundary_data_ptr = new zeroFlux();
+	      surf_heat_boundary_data_ptr = new Chombo::zeroFlux();
 	    }
 	}
 
@@ -799,10 +799,10 @@ int main(int argc, char* argv[]) {
       // set basal (lower surface) heat boundary data. 
       // ---------------------------------------------
       
-      SurfaceFlux* basal_heat_boundary_data_ptr = SurfaceFlux::parse("basalHeatBoundaryData");
+      Chombo::SurfaceFlux* basal_heat_boundary_data_ptr = Chombo::SurfaceFlux::parse("basalHeatBoundaryData");
       if (basal_heat_boundary_data_ptr == NULL)
        	{
-       	  basal_heat_boundary_data_ptr = new zeroFlux();
+       	  basal_heat_boundary_data_ptr = new Chombo::zeroFlux();
        	}
       
       amrObject.setBasalHeatBoundaryData(basal_heat_boundary_data_ptr);
@@ -815,46 +815,46 @@ int main(int argc, char* argv[]) {
     }
     
     {
-      IceInternalEnergyIBC* internalEnergyIBC = NULL;
-      ParmParse tempPP("temperature");
+      Chombo::IceInternalEnergyIBC* internalEnergyIBC = NULL;
+      CH_XD::ParmParse tempPP("temperature");
       std::string tempType("constant");
       tempPP.query("type",tempType);
       if (tempType == "constant")
 	{
 	  Real T = 258.0;
 	  tempPP.query("value",T);
-	  ConstantIceTemperatureIBC* ptr = new ConstantIceTemperatureIBC(T);
-	  internalEnergyIBC  = static_cast<IceInternalEnergyIBC*>(ptr);
+	  Chombo::ConstantIceTemperatureIBC* ptr = new Chombo::ConstantIceTemperatureIBC(T);
+	  internalEnergyIBC  = static_cast<Chombo::IceInternalEnergyIBC*>(ptr);
 	}
       else if (tempType == "LevelData")
 	{
-	  ParmParse ildPP("inputLevelData");
-	  LevelDataTemperatureIBC* ptr = NULL;
-	  ptr = LevelDataTemperatureIBC::parse(ildPP); CH_assert(ptr != NULL);
-	  internalEnergyIBC  = static_cast<IceInternalEnergyIBC*>(ptr);
+	  CH_XD::ParmParse ildPP("inputLevelData");
+	  Chombo::LevelDataTemperatureIBC* ptr = NULL;
+	  ptr = Chombo::LevelDataTemperatureIBC::parse(ildPP); CH_assert(ptr != NULL);
+	  internalEnergyIBC  = static_cast<Chombo::IceInternalEnergyIBC*>(ptr);
 	}
       else if (tempType == "VerticalConduction")
 	{
-	  VerticalConductionInternalEnergyIBC* ptr = NULL;
-	  ptr = VerticalConductionInternalEnergyIBC::parse(tempPP); 
+	  Chombo::VerticalConductionInternalEnergyIBC* ptr = NULL;
+	  ptr = Chombo::VerticalConductionInternalEnergyIBC::parse(tempPP); 
 	  CH_assert(ptr != NULL);
-	  internalEnergyIBC  = static_cast<IceInternalEnergyIBC*>(ptr);
+	  internalEnergyIBC  = static_cast<Chombo::IceInternalEnergyIBC*>(ptr);
 	}
 #ifdef HAVE_PYTHON
       else if (tempType == "Python")
 	{
-	  ParmParse pyPP("PythonIceTemperatureIBC");
+	  CH_XD::ParmParse pyPP("PythonIceTemperatureIBC");
 	  std::string module;
 	  pyPP.get("module",module);
 	  std::string funcName = "temperature";
 	  pyPP.query("function",funcName);
 	  internalEnergyIBC  = static_cast<IceInternalEnergyIBC*>
-	    (new PythonInterface::PythonIceTemperatureIBC(module, funcName));
+	    (new Chombo::PythonInterface::PythonIceTemperatureIBC(module, funcName));
 	}
 #endif
       else 
 	{
-	  MayDay::Error("bad temperature/internal energy type");
+	  Chombo::MayDay::Error("bad temperature/internal energy type");
 	}	
       amrObject.setInternalEnergyBC(internalEnergyIBC);
       if (internalEnergyIBC != NULL)
@@ -866,10 +866,10 @@ int main(int argc, char* argv[]) {
     amrObject.setDomainSize(domainSize);
 
 
-    CalvingModel* calving_model_ptr = CalvingModel::parseCalvingModel("CalvingModel");
+    Chombo::CalvingModel* calving_model_ptr = Chombo::CalvingModel::parseCalvingModel("CalvingModel");
     if (calving_model_ptr == NULL)
       {
-	calving_model_ptr = new NoCalvingModel;
+	calving_model_ptr = new Chombo::NoCalvingModel();
       }
     amrObject.setCalvingModel(calving_model_ptr);
     
@@ -883,17 +883,17 @@ int main(int argc, char* argv[]) {
 	{
 	  ///currently not deleting this, need to decide
 	  ///how that will be done
-	  DamageIceObserver* ptr = new DamageIceObserver();
+	  Chombo::DamageIceObserver* ptr = new Chombo::DamageIceObserver();
 	  amrObject.addObserver(ptr);
 
 	  //whatever the constitutive relation was, wrap
 	  //it up in a DamageConstitutiveRelation tied
 	  //to the DamageIceObserver components
-	  DamageConstitutiveRelation* dcrptr = 
-	    new DamageConstitutiveRelation(constRelPtr, &ptr->damage());
+	  Chombo::DamageConstitutiveRelation* dcrptr = 
+	    new Chombo::DamageConstitutiveRelation(constRelPtr, &ptr->damage());
 	  amrObject.setConstitutiveRelation(dcrptr);
 
-	  CalvingModel* d_calving_model_ptr = new DamageCalvingModel(calving_model_ptr, &ptr->damage());
+	  Chombo::CalvingModel* d_calving_model_ptr = new Chombo::DamageCalvingModel(calving_model_ptr, &ptr->damage());
 	  amrObject.setCalvingModel(d_calving_model_ptr);
 	  delete d_calving_model_ptr;
 	  
@@ -907,7 +907,7 @@ int main(int argc, char* argv[]) {
       pp2.query("melange_model",melange_model);
       if (melange_model)
 	{
-	  MelangeIceObserver* ptr = new MelangeIceObserver();
+	  Chombo::MelangeIceObserver* ptr = new Chombo::MelangeIceObserver();
 	  amrObject.addObserver(ptr);
 	}
     }
@@ -979,7 +979,7 @@ int main(int argc, char* argv[]) {
     {
       // finally, carry out an optional regression test
       
-      ParmParse ppr("regression");
+      CH_XD::ParmParse ppr("regression");
       
       std::string result_hdf5("");
       ppr.query("result_hdf5", result_hdf5);
@@ -991,11 +991,11 @@ int main(int argc, char* argv[]) {
 
 	  Real tol = 1.0e-10;
 	  ppr.query("tol",tol);
-          Real norm = HDF5NormTest(result_hdf5, reference_hdf5);
+          Real norm = Chombo::HDF5NormTest(result_hdf5, reference_hdf5);
       	  if (tol < norm)
 	    {
 	      ierr = 1;
-              pout() << "FAILED HDF5NormTest!  norm = "
+              Chombo::pout() << "FAILED HDF5NormTest!  norm = "
                      << norm 
                      << "   tolerance = " << tol 
                      << endl;

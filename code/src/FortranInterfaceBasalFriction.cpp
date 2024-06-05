@@ -10,6 +10,7 @@
 #include "FIBCF_F.H"
 #include "FillFromReference.H"
 #include "FortranInterfaceBasalFriction.H"
+#include "NamespaceHeader.H"
 FortranInterfaceBasalFriction::FortranInterfaceBasalFriction()
 {
   m_verbose = false;
@@ -67,3 +68,4 @@ FortranInterfaceBasalFriction::setBasalFriction(LevelData<FArrayBox>& a_C,
 {
   FillFromReference(a_C, m_fab, a_coordSys.dx(), m_dx, m_ghost, m_verbose);
 }
+#include "NamespaceFooter.H"

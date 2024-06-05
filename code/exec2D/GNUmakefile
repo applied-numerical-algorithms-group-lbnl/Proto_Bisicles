@@ -1,4 +1,6 @@
-
+USE_PROTO=TRUE
+USE_NAMESPACE=TRUE
+NAMESPACE=TRUE
 ebase = driver
 
 # the location of the Chombo "lib" directory
@@ -9,7 +11,7 @@ LibNames = AMRTimeDependent AMRElliptic AMRTools BoxTools
 
 # the locations of the source code directories
 base_dir = .
-src_dirs = ../util ../src ../src_amrfas
+src_dirs = ../util ../src ../src_amrfas ../proto_src
 
 # input file for 'run' target
 INPUT = fas.inputs

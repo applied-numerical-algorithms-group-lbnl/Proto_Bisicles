@@ -1,6 +1,6 @@
 
-#include "PrChUtilities.H"
-#include "PrChAveraging.H"
+#include "PrCh_Utilities.H"
+#include "PrCh_Averaging.H"
 #include "ProtoInterface.H"
 #include "Vector.H"
 

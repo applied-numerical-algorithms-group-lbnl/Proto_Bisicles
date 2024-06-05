@@ -15,7 +15,7 @@
 
 // default constructor
 MaskedCalvingModel::MaskedCalvingModel()
-  :m_calvingMask(NULL), m_minThickness(-10.0), m_calvingVal(0.1)
+  :m_calvingVal(0.1), m_calvingMask(NULL), m_minThickness(-10.0) 
 {
 }
 

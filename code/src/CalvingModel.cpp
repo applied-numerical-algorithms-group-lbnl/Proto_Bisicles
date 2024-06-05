@@ -262,7 +262,7 @@ void ProximityCalvingModel::applyCriterion
 		}
 	      if (mask(iv) == FLOATINGMASKVAL)
 		{
-		  thck(iv) = max(thck(iv),1.0);
+		  thck(iv) = std::max(thck(iv),1.0);
 		}
 
 	      // Record gain/loss of ice

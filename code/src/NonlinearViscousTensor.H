@@ -282,7 +282,7 @@ public:
   */
   virtual void setFaceViscCoef(const Vector<LevelData<FluxBox>*>& a_muCoef)
   {
-    int nlev = min(a_muCoef.size(),m_muCoef.size());
+    int nlev = std::min(a_muCoef.size(),m_muCoef.size());
 
     for (int lev=0; lev < nlev; lev++)
       {

@@ -10,7 +10,7 @@
 #include "KnownVelocitySolver.H"
 #include "BoxIterator.H"
 #include "ParmParse.H"
-
+#include "NamespaceHeader.H"
 
 void KnownVelocitySolver::define(const ProblemDomain& a_coarseDomain,
 		       ConstitutiveRelation* a_constRel,
@@ -94,3 +94,4 @@ int KnownVelocitySolver::solve(Vector<LevelData<FArrayBox>* >& a_horizontalVel,
     }
   return 0;
 }
+#include "NamespaceFooter.H"

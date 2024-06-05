@@ -54,6 +54,7 @@
 #include "PetscSolver.H"
 #include "cwrapper.H"
 #include "cdriverconstants.h"
+#include "NamespaceHeader.H"
 
 /// Associates an AmrIce with e.g LevelDataSurfaceFlux* objects intended for I/O with C/Fortran programs
 /**
@@ -1746,3 +1747,4 @@ void f_bisicles_pop_thin_ice_(int *intance_id, double *data_ptr, const double *t
 {
   bisicles_pop_thin_ice(intance_id, data_ptr, thin_ice_limit,dx,dims, boxlo, boxhi);
 }
+#include "NamespaceFooter.H"

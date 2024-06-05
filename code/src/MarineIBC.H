@@ -43,7 +43,7 @@ public:
   {
     Real y = x[1] - 40e3;
     Real topography = Bx(x[0]) + By(y,4.0e+3,5.0e+2,24.0e+3);
-    topography = max(topography, -720.0);
+    topography = std::max(topography, -720.0);
     return topography;
   }
 

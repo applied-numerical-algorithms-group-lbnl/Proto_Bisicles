@@ -416,6 +416,7 @@ void IceNonlinearViscousTensor::setState(const Vector<LevelData<FArrayBox>*>& a_
 
 }
 
+#include "NamespaceFooter.H"
 
 
 

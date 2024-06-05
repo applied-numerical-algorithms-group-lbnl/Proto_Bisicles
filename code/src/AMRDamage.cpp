@@ -954,3 +954,4 @@ void DamageCalvingModel::applyCriterion(LevelData<FArrayBox>& a_thickness,
 	  }// end for (DataIterator dit(levelCoords.grids()); dit.ok(); ++dit)
     } // end if (a_stage == PostThicknessAdvection)
 } // end applyCriterion
+#include "NamespaceFooter.H"

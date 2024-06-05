@@ -1,8 +1,8 @@
 
 #include "AMRMultiGrid_Proto_Interface.H"
-#include "PrChUtilities.H"
 #include "ProtoInterface.H"
-#include "Proto_LoHiCenterStencil.H"
+#include "PrCh_Utilities.H"
+#include "PrCh_LoHiCenterStencil.H"
 #include "Vector.H"
 
 #ifndef __PrCh_IceVTO_H__
@@ -29,7 +29,6 @@ namespace PrCh_AMR_Elliptic
   typedef Proto::LevelBoxData<double,  DIM    , Proto::MEMTYPE_DEFAULT,  Proto::PR_FACE_0 >   pr_xfac_data_vec;
   typedef Proto::LevelBoxData<double,  DIM    , Proto::MEMTYPE_DEFAULT,  Proto::PR_FACE_1 >   pr_yfac_data_vec;
   typedef Proto::LevelBoxData<double,  DIM    , Proto::MEMTYPE_DEFAULT,  Proto::PR_FACE_2 >   pr_zfac_data_vec;
-                                                                 
   ///AMRMultigrid forces me to use some of these.
   typedef Chombo::ProblemDomain                                                               ch_dom; // 
   typedef Chombo::MayDay                                                                      ch_mayday;
@@ -38,16 +37,17 @@ namespace PrCh_AMR_Elliptic
   typedef Chombo::MGLevelOp<        pr_cell_data_vec>                                         ch_mglevelop_vec;
 
   typedef PrCh_Lo_Hi_Center::LHC_MetaData     lo_hi_center_t;
+  typedef Chombo::AMRFASOp<pr_cell_data_vec> ch_amrfas_op;
 
   ///
   /**
      pr_cell_data_vec derived class for FAS operator
   **/
-  class AMRFAS_Proto_Vec_Op : public AMRFASOp<pr_cell_data_vec>
+  class AMRFAS_Proto_Vec_Op : public ch_amrfas_op
   {
   public:  
     ///
-    AMRFAS_Proto_Vec_Op( int a_order,const DisjointBoxLayout &a_grid )
+    AMRFAS_Proto_Vec_Op( int a_order,const ch_dbl &a_grid )
       :AMRFASOp<pr_cell_data_vec >( a_order, a_grid )
     {
     }
@@ -259,7 +259,7 @@ namespace PrCh_AMR_Elliptic
   public:
     ///
     PrCh_IceVTO( int a_o, 
-                 const DisjointBoxLayout &a_grid,
+                 const ch_dbl &a_grid,
                  const ConstitutiveRelation*  a_constRelPtr,
                  const BasalFrictionRelation* a_basalFrictionRelPtr,
                  IceThicknessIBC* a_bc)
@@ -333,7 +333,7 @@ namespace PrCh_AMR_Elliptic
     ///
     virtual void define( const ProblemDomain& a_coarseDomain, 
                          const RealVect&      a_crsDx,
-                         const Vector<DisjointBoxLayout>& a_grids,
+                         const Vector<ch_dbl>& a_grids,
                          const Vector<int>&   a_refRatios,
                          int a_nSRGrids = 0
       )
@@ -345,7 +345,7 @@ namespace PrCh_AMR_Elliptic
     ///
     virtual RefCountedPtr<AMRFASOp<pr_cell_data_vec > > 
     AMRNewOp(int a_ilev, 
-             const DisjointBoxLayout& a_grid,
+             const ch_dbl& a_grid,
              bool a_isSR = false )
     {
       ch_mayday::Error("not implemented");
@@ -378,7 +378,7 @@ namespace PrCh_AMR_Elliptic
     virtual void define(const ProblemDomain& a_coarseDomain,
                         ConstitutiveRelation* a_constRel,
                         BasalFrictionRelation* a_basalFrictionRel,
-                        const Vector<DisjointBoxLayout>& a_vectGrids,
+                        const Vector<ch_dbl>& a_vectGrids,
                         const Vector<int>& a_vectRefRatio,
                         const RealVect& a_dxCrse,
                         IceThicknessIBC* a_bc,

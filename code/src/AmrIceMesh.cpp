@@ -144,7 +144,7 @@ AmrIce::regrid()
       
       {
 	// now generate new boxes
-	int top_level = min(m_finest_level, m_max_level-1);
+	int top_level = std::min(m_finest_level, m_max_level-1);
 	Vector<Vector<Box> > old_grids(m_finest_level+1);
 	Vector<Vector<Box> > new_grids;
 	
@@ -614,7 +614,7 @@ AmrIce::tagCells(Vector<IntVectSet>& a_tags)
 
   
   int top_level = a_tags.size();
-  top_level = min(m_tag_cap,min(top_level-1, m_finest_level));
+  top_level = std::min(m_tag_cap, std::min(top_level-1, m_finest_level));
   // loop over levels
   for (int lev=0; lev<=top_level; lev++)
     {
