@@ -1676,7 +1676,7 @@ AmrIce::defineSolver()
           m_velSolver = NULL;
         }
       
-      FASIceSolver *solver = new Proto_FAS_Ice_Solver();
+      PrCh_AMR_Elliptic::Proto_FAS_IceSolver *solver = new PrCh_AMR_Elliptic::Proto_FAS_IceSolver();
       m_velSolver = solver;
       
       solver->setParameters( "Proto_FAS_Ice_Solver" );
@@ -4132,7 +4132,7 @@ AmrIce::computeDt()
 	      faceBox.surroundingNodes(dir);
 	      Real maxVel = 1.0e-10 + levelVel[levelDit][dir].norm(faceBox,p, 0, 1);
 	      Real localDt = m_amrDx[lev]/maxVel;
-	      dtLev = min(dtLev, localDt);
+	      dtLev     = std::min(dtLev, localDt);
 	      maxVelLev = std::max(maxVelLev, maxVel);
 	    }
 	}
@@ -4140,7 +4140,7 @@ AmrIce::computeDt()
       if (m_diffusionTreatment == EXPLICIT){
 	MayDay::Error("diffusion_treatment == explicit not supported now : use none");
       }
-      dt = min(dt, dtLev);
+      dt        = std::min(dt, dtLev);
       maxVelAll = std::max(maxVelAll, maxVelLev);
     }
 

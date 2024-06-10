@@ -70,7 +70,7 @@ AMRFASOp<T>::smooth( RefCountedPtr<T> a_phi,
   // compute state -- linear smoother (perhaps)
   bool did_exchange = false; 
 
-  if ( a_phiCoarse && a_phiCoarse->isDefined() )
+  if ( a_phiCoarse  )
     {
       CH_TIME("AMRFASOp::smooth::coarseFineInterp");
       // fill in intersection of ghost cells and a_phi's boxes 
