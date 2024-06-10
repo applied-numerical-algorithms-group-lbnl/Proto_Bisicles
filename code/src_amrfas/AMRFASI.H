@@ -44,15 +44,11 @@ AMRFASOp<T>::residual( T& a_resid,
   apply( a_resid, a_phi, a_phiCoarse ); // sets this C-F ghost point
 
   // fine grid could be SR and not defined refluxer yet (need to do for AMR)
-  if ( a_phiFine && a_phiFine->isDefined() )
-    {
-      CH_assert(a_finerOp);
-      reflux( *a_phiFine, a_phi, a_resid, a_finerOp ); // this sets fine ghosts with C-F interp with ops C-F interp
-    }
-  else if ( a_phiFine )
-    {
-      MayDay::Abort("AMRFASOp<T>::residual !a_phiFine->isDefined()");
-    }
+  if ( a_phiFine )
+  {
+    CH_assert(a_finerOp);
+    reflux( *a_phiFine, a_phi, a_resid, a_finerOp ); // this sets fine ghosts with C-F interp with ops C-F interp
+  }
 
   // b - L u
   axby( a_resid, a_resid, a_rhs, -1.0, 1.0 );
