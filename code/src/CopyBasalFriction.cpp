@@ -10,6 +10,7 @@
 #include "FIBCF_F.H"
 #include "FillFromReference.H"
 #include "CopyBasalFriction.H"
+#include "NamespaceHeader.H"
 CopyBasalFriction::CopyBasalFriction()
 {
   m_verbose = false;
@@ -83,3 +84,4 @@ CopyBasalFriction::setBasalFriction(LevelData<FArrayBox>& a_C,
     }
 
 }
+#include "NamespaceFooter.H"

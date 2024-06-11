@@ -67,6 +67,8 @@ public:
   {
   }
 
+  virtual void exchangeState(RefCountedPtr<T> a_phi,
+			     Copier &a_copier)   = 0;
   ///
   virtual void restrictState( RefCountedPtr<AMRFASOp<T> >,
 			      Copier &a_copier ) = 0; 
@@ -305,6 +307,11 @@ public:
 class AMRFAS_LDFOp : public AMRFASOp<LevelData<FArrayBox> >
 {
 public:  
+  virtual void exchangeState(RefCountedPtr< LevelData<FArrayBox> > a_phi,
+			     Copier &a_copier) 
+  {
+    a_phi->exchange(a_copier);
+  }
   //! Constructor.
   AMRFAS_LDFOp( int a_order, const DisjointBoxLayout &a_grid ) : 
     AMRFASOp<LevelData<FArrayBox> >( a_order, a_grid )

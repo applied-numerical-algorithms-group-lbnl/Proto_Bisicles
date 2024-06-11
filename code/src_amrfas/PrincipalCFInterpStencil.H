@@ -14,7 +14,7 @@
 #include "FArrayBox.H"
 #include "IntVectSet.H"
 #include "Vector.H"
-#include "UsingNamespace.H"
+#include "NamespaceHeader.H"
 
 
 class BaseCFInterpMatrix;
@@ -85,7 +85,7 @@ protected:
   /// try to initialize the stencil using a_mh, return true for a success.
   /// The 2^D-1 symmetries of a_mh are also tried.
   bool tryStencil(const IntVectSet& a_validArea,
-                  BaseCFInterpMatrix const*const a_mh);
+                  Chombo::BaseCFInterpMatrix const*const a_mh);
 
   /// whether define() has been called
   bool m_defined;
@@ -124,5 +124,5 @@ private:
     MayDay::Error("invalid operator");
   }
 };
-
+#include "NamespaceFooter.H"
 #endif

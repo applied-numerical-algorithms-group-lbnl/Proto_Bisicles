@@ -11,7 +11,7 @@
 #include "CFInterpMatrixLibrary.H"
 #include "PrincipalCFInterpStencil.H"
 #include "CFMatrixOldF_F.H"
-
+#include "NamespaceHeader.H"
 PrincipalCFInterpStencil::PrincipalCFInterpStencil()
 {
   m_defined = false;
@@ -92,9 +92,9 @@ const int PrincipalCFInterpStencil::vectorToFineIndex(const IntVect& iv, int r)
 }
 
 bool PrincipalCFInterpStencil::tryStencil
-(const IntVectSet& a_validArea, BaseCFInterpMatrix const*const a_mh)
+(const IntVectSet& a_validArea, Chombo::BaseCFInterpMatrix const*const a_mh)
 {
-  const int nP = a_mh->getParameter(BaseCFInterpMatrix::NumPolynmCoefs);
+  const int nP = a_mh->getParameter(Chombo::BaseCFInterpMatrix::NumPolynmCoefs);
   const IntVect shift = IntVect::Unit*static_cast<int>(m_refineCoarse/2);
 
   for (int i=0; i<m_signFlippers.size(); i++)
@@ -119,7 +119,7 @@ bool PrincipalCFInterpStencil::tryStencil
                 + (m_signFlippers[i]-IntVect::Unit)*(1-m_refineCoarse)/2;
               m_coarseToFineFab(newV, j) =
                 static_cast<double>(a_mh->getMatrix(j,k))/
-                a_mh->getParameter(BaseCFInterpMatrix::Denominator);
+                a_mh->getParameter(Chombo::BaseCFInterpMatrix::Denominator);
             }
         }
       return true;
@@ -170,3 +170,4 @@ const IntVectSet& PrincipalCFInterpStencil::getStencil(void) const
 //     }
 //   return os;
 // }
+#include "NamespaceFooter.H"

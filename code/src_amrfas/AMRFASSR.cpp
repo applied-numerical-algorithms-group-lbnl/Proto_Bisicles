@@ -12,7 +12,7 @@
 
 #include "AMRFASSR.H"
 #include "AMRIO.H"
-
+#include "NamespaceHeader.H"
 //*******************************************************
 // AMRFASSR Implementation
 //*******************************************************
@@ -491,3 +491,4 @@ writeLevelname( m_residual[a_ilev], "copyoutres.hdf5" );
 			 m_inCopier[sr_idx] 
 			 );
 }
+#include "NamespaceFooter.H"

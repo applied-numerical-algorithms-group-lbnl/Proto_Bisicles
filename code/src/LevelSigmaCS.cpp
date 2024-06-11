@@ -1337,7 +1337,7 @@ void LevelSigmaCS::interpFromCoarse(const LevelSigmaCS& a_crseCoords,
 	  BaseFab<int> g(b,1);
 	  g.copy(f);
 	  int test[4] = {GROUNDEDMASKVAL,FLOATINGMASKVAL,OPENSEAMASKVAL,OPENLANDMASKVAL};
-          int ydir = min(1,SpaceDim-1);
+          int ydir = std::min(1,SpaceDim-1);
 
 	  const IntVect ex = BASISV(0);
 	  const IntVect ey = BASISV(ydir);

@@ -12,11 +12,11 @@
 
 
 #include "FORT_PROTO.H"
-#include "AMRFASPoissonOp.H"
 
 #include "AMRFASOpF_F.H"
 #include "AverageF_F.H"
 #include "ParmParse.H"
+#include "AMRFASPoissonOp.H"
 
 #include "NamespaceHeader.H"
 

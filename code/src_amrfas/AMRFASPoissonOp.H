@@ -14,8 +14,9 @@
 #include "AMRFAS.H"
 #include "LevelFluxRegister.H"
 #include "CoarseFineInterp.H"
-#include "NamespaceHeader.H"
 #include "PrincipalCFInterpStencil.H"
+#include "NamespaceHeader.H"
+
 ///
 /**
    Factory to create AMR FASPoissonOp(s) -- these two classes should be cloned to add operators

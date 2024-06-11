@@ -15,7 +15,7 @@
 #include "IntVectSet.H"
 #include "FArrayBox.H"
 #include "Vector.H"
-
+#include "NamespaceHeader.H"
 ///
 ///  This class organizes the Coarse-Fine interpolation matrix
 ///   that maps the known values to unknowns.
@@ -114,6 +114,7 @@ public:
 template<int p, int D, int r, int i0, int i1, int i2>
 const int
 CFInterpMatrix<p,D,r,i0,i1,i2>::s_indexStar[] = {i0, i1, i2};
+#include "NamespaceFooter.H"
 
 
 #endif
