@@ -563,7 +563,11 @@ public:
 		      Vector<RefCountedPtr<T> > &a_rhs,		      
 		      int *a_status = 0
 		      );
-  
+
+  Real recoverInitialResidual() const
+  {
+    return m_initial_rnorm;
+  }
 protected:
   virtual Real solveNoInit( Vector<RefCountedPtr<T> >& a_phi,
 			    const Vector<RefCountedPtr<T> >& a_rhs, 
@@ -666,7 +670,7 @@ protected:
 
   // data
   Vector<RefCountedPtr<AMRFASOp<T> > > m_op;
-
+  Real m_initial_rnorm; // default = 4586.  set during solve.   Used to get around solve interface
   Vector<RefCountedPtr<T> >  m_residual;
   Vector<RefCountedPtr<T> >  m_temp;
   Vector<RefCountedPtr<T> >  m_rhsC;

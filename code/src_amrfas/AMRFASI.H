@@ -726,6 +726,8 @@ AMRFAS<T>::solve( Vector<RefCountedPtr<T> >& a_phi,
 {
   CH_TIME("AMRFAS::solve");
 
+  /// just a hook to get the initial norm around a clumsy VelSolver interface.   No semantic significance.
+  m_initial_rnorm = 4586;  
   // convert to internal vectors: m_opInternal[k+m_numInternalLevels] = m_opUser[k], 0 <= k < m_numLevels;
   const int numUserLevels = a_phi.size(), nLevTot = numUserLevels+m_numInternalLevels;
   const int ncomp = a_phi[0]->nComp();
@@ -800,7 +802,7 @@ Real AMRFAS<T>::solveNoInit( Vector<RefCountedPtr<T> >& a_phi,
       MayDay::Error("Nan residual norm");
     }
   }
-
+  m_initial_rnorm = initial_norm;
   Real rnorm = initial_norm;
   Real norm_last = 2*initial_norm; // keep this from triggering anything if no norms
 
@@ -865,7 +867,7 @@ Real AMRFAS<T>::solveNoInit( Vector<RefCountedPtr<T> >& a_phi,
     goIter = iter < m_max_iter;                        //keep iterating if iter < max iteration count
     goMin = iter < m_min_iter ;                         // keep iterating if iter < min
 
-    if( !m_avoid_norms )
+    //if( !m_avoid_norms )
     {
       rnorm = computeAMRResidual_private( m_temp, a_phi, a_rhs );	  
       goNorm = rnorm > m_atol;                        //keep iterating if norm is not small enough

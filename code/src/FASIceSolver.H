@@ -182,10 +182,11 @@ public:
   
   /// full solve for non-isothermal ice
   virtual int solve(Vector<LevelData<FArrayBox>* >& a_horizontalVel,
-		    Vector<LevelData<FArrayBox>* >& a_calvedIce,
-		    Vector<LevelData<FArrayBox>* >& a_addedIce,
-		    Vector<LevelData<FArrayBox>* >& a_removedIce,
-		    Real& a_initialResidualNorm, Real& a_finalResidualNorm,
+		    Vector<LevelData<FArrayBox>* >& a_calvedIce, // not used
+		    Vector<LevelData<FArrayBox>* >& a_addedIce,  // not used
+		    Vector<LevelData<FArrayBox>* >& a_removedIce,//not used
+		    Real& a_initialResidualNorm, //returned from AMRFAS
+                    Real& a_finalResidualNorm,   //returned from AMRFAS
 		    const Real a_convergenceMetric,
                     const Vector<LevelData<FArrayBox>* >& a_rhs,
                     const Vector<LevelData<FArrayBox>* >& a_C,

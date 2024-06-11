@@ -1009,9 +1009,9 @@ int main(int argc, char* argv[]) {
   
 
   // report memory usage and leaks
-#ifdef REPORT_MEMORY
-  dumpmemoryatexit();
-#endif
+//#ifdef REPORT_MEMORY
+//  dumpmemoryatexit();
+//#endif
   CH_TIMER_REPORT();
 
 #ifdef HAVE_PYTHON

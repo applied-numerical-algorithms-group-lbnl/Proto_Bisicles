@@ -406,25 +406,6 @@ FASIceSolver::solve(Vector<LevelData<FArrayBox>* >& a_horizontalVel,
                     Vector<RefCountedPtr<LevelSigmaCS > >& a_coordSys,
                     Real a_time,
                     int a_lbase, int a_maxLevel)
-/**
-   FASIceSolver::solve( Vector<LevelData<FArrayBox>* >& a_horizontalVel,
-   Vector<LevelData<FArrayBox>* >& a_calvedIce,
-   Vector<LevelData<FArrayBox>* >& a_addedIce,
-   Vector<LevelData<FArrayBox>* >& a_removedIce,
-   Real& a_initialResidualNorm, 
-   Real& a_finalResidualNorm,
-   const Real a_convergenceMetric,
-   const Vector<LevelData<FArrayBox>* >& a_rhs,
-   const Vector<LevelData<FArrayBox>* >& a_beta,  // Basal C (a_beta)
-   const Vector<LevelData<FArrayBox>* >& a_beta0, // not used
-   const Vector<LevelData<FArrayBox>* >& a_A,
-   const Vector<LevelData<FluxBox>* >& a_muCoef,  // not used, this is computed
-   Vector<RefCountedPtr<LevelSigmaCS > >& a_coordSys,
-   Real a_time,
-   int a_lbase, 
-   int a_maxLevel
-   )
-**/
 {
   CH_TIME("FASIceSolver::solve");
 
@@ -485,8 +466,12 @@ FASIceSolver::solve(Vector<LevelData<FArrayBox>* >& a_horizontalVel,
   // solve -- should we zero out vel?
   int returnCode;
   a_finalResidualNorm = AMRFAS<LevelData<FArrayBox> >::solve( phi, rhs, &returnCode );
-
-  a_initialResidualNorm = 1.0; // don't have 
+  if(returnCode != 0)
+  {
+    pout() << "AMRFAS returnCode = " << returnCode << endl;
+    MayDay::Warning("AMRFAS returned non-zero error code");
+  }
+  a_initialResidualNorm = AMRFAS<LevelData<FArrayBox> >::recoverInitialResidual();
 
   // copy out
   for (int lev = 0; lev < a_maxLevel + 1; ++lev)
