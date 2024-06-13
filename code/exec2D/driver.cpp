@@ -52,6 +52,7 @@
 #include "FineInterp.H"
 #include "ReadLevelData.H"
 #include "memusage.H"
+#include "PrCh_Print_Debugging_Tools.H"
  
 #ifdef CH_USE_PETSC
 #include "petsc.h"
