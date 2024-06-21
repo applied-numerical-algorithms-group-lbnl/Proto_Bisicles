@@ -57,8 +57,8 @@ using std::string;
 #include "InverseVerticallyIntegratedVelocitySolver.H"
 #include "PetscIceSolver.H"
 #include "RelaxSolver.H"
-#include "FASIceSolver.H"
-#include "Proto_FAS_Ice_Solver.H"
+#include   "ChF_FAS_Ice_Solver.H"
+
 #include "KnownVelocitySolver.H"
 #include "VCAMRPoissonOp2.H"
 #include "AMRPoissonOpF_F.H"
@@ -1630,6 +1630,7 @@ AmrIce::defineSolver()
 #endif
   else if (m_solverType == FASMGAMR)
   {
+
     // for now, at least, just delete any existing solvers
     // and rebuild them from scratch
     if (m_velSolver != NULL)
@@ -1637,34 +1638,31 @@ AmrIce::defineSolver()
       delete m_velSolver;
       m_velSolver = NULL;
     }
-      
-    FASIceSolver *solver = new FASIceSolver;
-    m_velSolver = solver;
-      
-    solver->setParameters( "FASSolver" );
 
+    Real tol = m_velocity_solver_tolerance;
+    int maxIter = m_maxSolverIterations;
+    int verbosity = 4586;
     RealVect dxCrse = m_amrDx[0]*RealVect::Unit;
-
     int numLevels = m_finest_level + 1;
+
+    ChF_FAS_Ice_Solver *solver =
+      new ChF_FAS_Ice_Solver(m_amrDomains[0],
+                             m_constitutiveRelation,
+                             m_basalFrictionRelation,
+                             m_amrGrids,
+                             m_refinement_ratios,
+                             dxCrse,
+                             m_thicknessIBCPtr,
+                             numLevels,
+                             tol, maxIter, verbosity);
+    m_velSolver = static_cast<IceVelocitySolver*>(solver);
+      
+    solver->setParameters(std::string( "FASSolver") );
+
 
     // make sure that the IBC has the correct grid hierarchy info
     m_thicknessIBCPtr->setGridHierarchy( m_vect_coordSys, m_amrDomains );
 
-    solver->define( m_amrDomains[0],
-                    m_constitutiveRelation,
-                    m_basalFrictionRelation,
-                    m_amrGrids,
-                    m_refinement_ratios,
-                    dxCrse,
-                    m_thicknessIBCPtr,
-                    numLevels );
-
-    solver->setTolerance( m_velocity_solver_tolerance );
-
-    if (m_maxSolverIterations > 0)
-    {
-      solver->setMaxIterations( m_maxSolverIterations );
-    }
   }
   else if (m_solverType == Proto_FASMGAMR)
   {
@@ -1675,7 +1673,8 @@ AmrIce::defineSolver()
       delete m_velSolver;
       m_velSolver = NULL;
     }
-      
+    MayDay::Error("proto_fasmgamr not implemented");
+#if 0    
     PrCh_AMR_Elliptic::Proto_FAS_IceSolver *solver = new PrCh_AMR_Elliptic::Proto_FAS_IceSolver();
     m_velSolver = solver;
       
@@ -1703,6 +1702,7 @@ AmrIce::defineSolver()
     {
       solver->setMaxIterations( m_maxSolverIterations );
     }
+#endif
   }
 #ifdef HAVE_PYTHON
   else if (m_solverType == Python)
