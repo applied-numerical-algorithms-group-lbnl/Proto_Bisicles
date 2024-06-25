@@ -1653,13 +1653,10 @@ AmrIce::defineSolver()
                              m_refinement_ratios,
                              dxCrse,
                              m_thicknessIBCPtr,
-                             numLevels,
-                             tol, maxIter, verbosity);
+                             numLevels);
+
     m_velSolver = static_cast<IceVelocitySolver*>(solver);
       
-    solver->setParameters(std::string( "FASSolver") );
-
-
     // make sure that the IBC has the correct grid hierarchy info
     m_thicknessIBCPtr->setGridHierarchy( m_vect_coordSys, m_amrDomains );
 
