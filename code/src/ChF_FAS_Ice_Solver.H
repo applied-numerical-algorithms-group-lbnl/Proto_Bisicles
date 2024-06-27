@@ -13,6 +13,7 @@
 
 #include "IceVelocitySolver.H"
 #include "ViscousTensorOp.H"
+#include "Base_Simplified_AMRLevelOp.H"
 #include "AMRFASMultiGrid.H"
 #include <memory>  //good title for a book
 ///
@@ -20,12 +21,12 @@ namespace Chombo
 {
   typedef           LevelData<FArrayBox>  ch_ldf;
   typedef     Base_Simplified_AMRLevelOp< ch_ldf > ch_amrlevelop;
-  typedef         AMRFASMultiGridpoached< ch_ldf > ch_amrfasmg;
-  typedef               MGLevelOppoached< ch_ldf > ch_mglevelop;
-  typedef            LinearSolverpoached< ch_ldf > ch_linear_solver;
-  typedef             RelaxSolverpoached< ch_ldf > ch_relax_solver;
-  typedef          BiCGStabSolverpoached< ch_ldf > ch_bicgstab_solver;
-  typedef       AMRLevelOpFactorypoached< ch_ldf > ch_amrlevelop_fact;
+  typedef                AMRFASMultiGrid< ch_ldf > ch_amrfasmg;
+  typedef                      MGLevelOp< ch_ldf > ch_mglevelop;
+  typedef                   LinearSolver< ch_ldf > ch_linear_solver;
+  typedef                    RelaxSolver< ch_ldf > ch_relax_solver;
+  typedef                 BiCGStabSolver< ch_ldf > ch_bicgstab_solver;
+  typedef              AMRLevelOpFactory< ch_ldf > ch_amrlevelop_fact;
   typedef   ProblemDomain ch_dom;
   typedef          MayDay ch_mayday;
 
@@ -36,9 +37,52 @@ namespace Chombo
      VTO precomputes tons of stuff.  
      I will poach heavily from  VTO.   I am also using the simpler Base_Simplified_AMRLevelOp
   **/
-  class ChF_Ice_VTO_Op:  public ch_amrlevelop
+  class ChF_Ice_Viscous_Tensor_Op:  public ch_amrlevelop
   {
+  private:
+    ///strong construction only
+    ChF_Ice_Viscous_Tensor_Op();
+
   public:
+    ///This is  the stuff that came in during construction
+    ProblemDomain                m_coarseDomain       ;
+    ConstitutiveRelation*        m_constRel           ;
+    BasalFrictionRelation*       m_basalFrictionRel   ;
+    Vector<DisjointBoxLayout>    m_vectGrids          ;
+    Vector<int>                  m_refRat       ;
+    RealVect                     m_dxCrse             ;
+    IceThicknessIBC*             m_bc                 ;
+    int                          m_numLevels          ;
+    ch_dom                       m_indexSpace         ;
+    int                          m_depth              ;
+    
+    ///destructor  is trivial but has to be virtual
+    virtual ~ChF_Ice_Viscous_Tensor_Op(){;}
+
+    /// 
+    ChF_Ice_Viscous_Tensor_Op(const ch_dom                   &  a_coarseDomain       ,
+                              ConstitutiveRelation           *  a_constRel           ,
+                              BasalFrictionRelation          *  a_basalFrictionRel   ,
+                              const Vector<DisjointBoxLayout>&  a_vectGrids          ,
+                              const Vector<int>              &  a_refRat       ,
+                              const RealVect                 &  a_dxCrse             ,
+                              IceThicknessIBC                *  a_bc                 ,
+                              int                               a_numLevels          ,
+                              ch_dom                            a_indexSpace         ,
+                              int                               a_depth              )
+    {
+
+      m_coarseDomain       = m_coarseDomain     ;
+      m_constRel           = m_constRel         ;
+      m_basalFrictionRel   = m_basalFrictionRel ;
+      m_vectGrids          = m_vectGrids        ;
+      m_refRat       = m_refRat     ;
+      m_dxCrse             = m_dxCrse           ;
+      m_bc                 = m_bc               ;
+      m_numLevels          = m_numLevels        ;
+      m_indexSpace         = m_indexSpace       ;
+      m_depth              = m_depth            ;
+    }
     virtual void
     prolongIncrement(ch_ldf      & a_phiThisLevel,
                      const ch_ldf& a_correctCoarse)
@@ -48,14 +92,14 @@ namespace Chombo
     
     ///
     virtual ch_dom
-    getDomainFromData(const level_data_type & a_data)
+    getDomainFromData(const ch_ldf & a_data)
     {
       ch_mayday::Error("not implmented");
     }
 
     ///
     virtual void
-    fillGhostDataOutsideDomain(level_data_type & a_phi,
+    fillGhostDataOutsideDomain(ch_ldf & a_phi,
                                const ch_dom    & a_domain) 
     {
       ch_mayday::Error("not implmented");
@@ -63,23 +107,23 @@ namespace Chombo
 
     ///
     virtual void
-    fillGhostDataOverFineFineInterface(level_data_type &  a_phiFine) 
+    fillGhostDataOverFineFineInterface(ch_ldf &  a_phiFine) 
     {
       ch_mayday::Error("not implmented");
     }
 
     ///
     virtual void
-    copyTo(level_data_type       &  a_dst,
-           const level_data_type &  a_src)
+    copyTo(ch_ldf       &  a_dst,
+           const ch_ldf &  a_src)
     {
       ch_mayday::Error("not implmented");
     }
     
     ///For this one, the derived class may assume all ghost cells have been set correctly
     virtual void 
-    applyOperator(level_data_type        & a_lph,
-                  const level_data_type  & a_phi)
+    applyOperator(ch_ldf        & a_lph,
+                  const ch_ldf  & a_phi)
     {
       ch_mayday::Error("not implmented");
     }
@@ -90,8 +134,8 @@ namespace Chombo
        To avoid this restriction, I named the function restriction instead of restrict.
     **/
     virtual void
-    restriction(level_data_type & a_resCoar,
-                level_data_type & a_resFine,
+    restriction(ch_ldf & a_resCoar,
+                ch_ldf & a_resFine,
                 int ref_rat)
     {
       ch_mayday::Error("not implmented");
@@ -100,26 +144,142 @@ namespace Chombo
 
     /// amr thing
     virtual void
-    fillGhostDataOverCoarseFineInterface(level_data_type       &  a_phiFine, 
-                                         const level_data_type &  a_phiCoar)
+    fillGhostDataOverCoarseFineInterface(ch_ldf       &  a_phiFine, 
+                                         const ch_ldf &  a_phiCoar)
     {
       ch_mayday::Error("not implmented");
     }
 
     /// amr thing
     virtual void
-    refluxFineCorrection(level_data_type       &  a_lphCoar,
-                         const level_data_type &  a_phiFine, 
-                         const level_data_type &  a_phiCoar,
+    refluxFineCorrection(ch_ldf       &  a_lphCoar,
+                         const ch_ldf &  a_phiFine, 
+                         const ch_ldf &  a_phiCoar,
                          ch_amrlevelop*   a_finerOp)
     {
       ch_mayday::Error("not implmented");
     }
 
+    ///from LinearOp
+    virtual void
+    create(ch_ldf      & a_lhs,
+           const ch_ldf& a_rhs)
+    {
+      ch_mayday::Error("not implmented");
+    }
+
+    ///from LinearOp
+    virtual void
+    assign(ch_ldf      & a_lhs,
+           const ch_ldf& a_rhs) 
+    {
+      ch_mayday::Error("not implmented");
+    }
     
-  }; //end class ChF_Ice_VTO_Op
+    ///from LinearOp
+    virtual Real
+    dotProduct(const ch_ldf      & a_1,
+               const ch_ldf      & a_2)     
+    {
+      Real retval = 4586;
+      ch_mayday::Error("not implmented");
+      return retval;
+    }
+
+
+    ///from LinearOp
+    virtual void
+    axby(ch_ldf      & a_lhs,
+         const ch_ldf& a_x,
+         const ch_ldf& a_y,
+         Real          a_a,
+         Real          a_b)
+    {
+      ch_mayday::Error("not implmented");
+    }
+
+    ///from LinearOp
+    virtual Real
+    norm(const ch_ldf & a_rhs, int a_ord)
+    {
+      Real retval = 4586;
+      ch_mayday::Error("not implmented");
+      return retval;
+    }
+    
+    ///from LinearOp
+    virtual void
+    setToZero(ch_ldf & a_lhs)
+    {
+      ch_mayday::Error("not implmented");
+    }
+
+    ///from MGLevelOp
+    virtual void
+    createCoarser(ch_ldf      & a_coarse,
+                  const ch_ldf& a_fine,
+                  bool ghosted)
+    {
+      ch_mayday::Error("not implmented");
+    }
+    
+    ///from MGLevelOp
+     virtual void
+     relax(ch_ldf      & a_correction,
+           const ch_ldf& a_residual,
+           int a_iterations)
+    {
+      ch_mayday::Error("not implmented");
+    }
+
+    virtual int refToCoarser()
+    {
+      int retval = 4586;
+      ch_mayday::Error("not implmented");
+      return retval;
+    }
+    
+    virtual void
+    AMRRestrict(ch_ldf      & a_resCoarse,
+                const ch_ldf& a_residual,
+                const ch_ldf& a_correction,
+                const ch_ldf& a_coarseCorrection,
+                bool a_skip_res)
+    {
+      ch_mayday::Error("not implmented");
+    }
+
+    ///
+    /** a_correction += I[2h->h](a_coarseCorrection) */
+    virtual void
+    AMRProlong(ch_ldf      & a_correction,
+               const ch_ldf& a_coarseCorrection)
+    {
+      ch_mayday::Error("not implmented");
+    }
+
+  ///
+  /** a_residual = a_residual - L(a_correction, a_coarseCorrection) */
+    virtual void
+    AMRUpdateResidual(ch_ldf      & a_residual,
+                      const ch_ldf& a_correction,
+                      const ch_ldf& a_coarseCorrection)
+    {
+      ch_mayday::Error("not implmented");
+    }
+
+    ///
+    /**
+     */
+    virtual void createCoarsened(ch_ldf&       a_lhs,
+                                 const ch_ldf& a_rhs,
+                                 const int&     a_refRat)
+    {
+      ch_mayday::Error("not implmented");
+    }
+  }; //end class ChF_Ice_Viscous_Tensor_Op
   
-  typedef ChF_Ice_VTO_Op ch_ice_op;
+  typedef ChF_Ice_Viscous_Tensor_Op ch_ice_op;
   /// class to make ChF_Ice_VTO's.   
   class ChF_Ice_VTO_Factory: public ch_amrlevelop_fact
   {
@@ -132,7 +292,7 @@ namespace Chombo
     ConstitutiveRelation*      m_constRel           ;
     BasalFrictionRelation*     m_basalFrictionRel   ;
     Vector<DisjointBoxLayout>  m_vectGrids          ;
-    Vector<int>                m_vectRefRatio       ;
+    Vector<int>                m_refRat       ;
     RealVect                   m_dxCrse             ;
     IceThicknessIBC*           m_bc                 ;
     int                        m_numLevels          ;
@@ -143,7 +303,7 @@ namespace Chombo
                         ConstitutiveRelation*             a_constRel           ,
                         BasalFrictionRelation*            a_basalFrictionRel   ,
                         const Vector<DisjointBoxLayout>&  a_vectGrids          ,
-                        const Vector<int>&                a_vectRefRatio       ,
+                        const Vector<int>&                a_refRat       ,
                         const RealVect&                   a_dxCrse             ,
                         IceThicknessIBC*                  a_bc                 ,
                         int                               a_numLevels          )
@@ -152,7 +312,7 @@ namespace Chombo
       m_constRel           =  a_constRel        ;
       m_basalFrictionRel   =  a_basalFrictionRel;
       m_vectGrids          =  a_vectGrids       ;
-      m_vectRefRatio       =  a_vectRefRatio    ;
+      m_refRat       =  a_refRat    ;
       m_dxCrse             =  a_dxCrse          ;
       m_bc                 =  a_bc              ;
       m_numLevels          =  a_numLevels       ;
@@ -168,10 +328,10 @@ namespace Chombo
         if(dom_lev == a_indexSpace)
         {
           found = true;
-          retval = m_vecRefRatio[ilev];
+          retval = m_refRat[ilev];
         }
         ///Chombo changes in place here
-        dom_lev.refine(m_vecRefRatio[ilev]);
+        dom_lev.refine(m_refRat[ilev]);
       }
       if(!found)
       {
@@ -179,6 +339,7 @@ namespace Chombo
       }
       return retval;
     }
+
     ///
     virtual ~ChF_Ice_VTO_Factory()
     {
@@ -187,8 +348,18 @@ namespace Chombo
     /// 
     virtual ch_amrlevelop* AMRnewOp(const ch_dom& a_indexSpace)
     {
-      ch_mayday::Error("not implemented");
-      return NULL;
+      ch_ice_op * ice_op_ptr
+        = new ch_ice_op(  m_coarseDomain       ,
+                          m_constRel           ,
+                          m_basalFrictionRel   ,
+                          m_vectGrids          ,
+                          m_refRat       ,
+                          m_dxCrse             ,
+                          m_bc                 ,
+                          m_numLevels          ,
+                          a_indexSpace,  0);
+      ch_amrlevelop* retval = static_cast<ch_ice_op*>(ice_op_ptr);
+      return retval;
     }
 
     ///
@@ -196,7 +367,17 @@ namespace Chombo
                                   int                  a_depth,
                                   bool                 a_homoOnly = true)
     {
-      ch_mayday::Error("not implemented");
+      ch_ice_op * ice_op_ptr
+        = new ch_ice_op(  m_coarseDomain       ,
+                          m_constRel           ,
+                          m_basalFrictionRel   ,
+                          m_vectGrids          ,
+                          m_refRat       ,
+                          m_dxCrse             ,
+                          m_bc                 ,
+                          m_numLevels          ,
+                          a_FineindexSpace,
+                          a_depth );
       return NULL;
     }
     
@@ -231,7 +412,7 @@ namespace Chombo
     ConstitutiveRelation*      m_constRel           ;
     BasalFrictionRelation*     m_basalFrictionRel   ;
     Vector<DisjointBoxLayout>  m_vectGrids          ;
-    Vector<int>                m_vectRefRatio       ;
+    Vector<int>                m_refRat       ;
     RealVect                   m_dxCrse             ;
     IceThicknessIBC*           m_bc                 ;
     int                        m_numLevels          ;
@@ -242,7 +423,7 @@ namespace Chombo
                        ConstitutiveRelation*             a_constRel           ,
                        BasalFrictionRelation*            a_basalFrictionRel   ,
                        const Vector<DisjointBoxLayout>&  a_vectGrids          ,
-                       const Vector<int>&                a_vectRefRatio       ,
+                       const Vector<int>&                a_refRat       ,
                        const RealVect&                   a_dxCrse             ,
                        IceThicknessIBC*                  a_bc                 ,
                        int                               a_numLevels          )
@@ -252,7 +433,7 @@ namespace Chombo
       m_constRel           =  a_constRel        ;
       m_basalFrictionRel   =  a_basalFrictionRel;
       m_vectGrids          =  a_vectGrids       ;
-      m_vectRefRatio       =  a_vectRefRatio    ;
+      m_refRat       =  a_refRat    ;
       m_dxCrse             =  a_dxCrse          ;
       m_bc                 =  a_bc              ;
       m_numLevels          =  a_numLevels       ;
@@ -279,25 +460,27 @@ namespace Chombo
                       Real a_time,
                       int a_lbase, int a_maxLevel)
     {
-      ch_amrfasmg   fas_solver;
       ch_ice_fact   ice_factory(m_coarseDomain       ,
                                 m_constRel           ,
                                 m_basalFrictionRel   ,
                                 m_vectGrids          ,
-                                m_vectRefRatio       ,
+                                m_refRat       ,
                                 m_dxCrse             ,
                                 m_bc                 ,
                                 m_numLevels          );
       ch_relax_solver relax_solver;
 
       ch_amrfasmg fas_solver;
-      fas_solver.define(m_coarseDomain, ice_factory, relax_solver, m_numLevels);
+      fas_solver.define(m_coarseDomain, ice_factory, &relax_solver, m_numLevels);
 
       bool zeroPhi = true; bool forceHomog = false;
       fas_solver.solve(a_horizontalVel, a_rhs, a_maxLevel, a_lbase, zeroPhi, forceHomog);
-      a_initialResidualNorm = m_solver->m_initial_rnom;
-      a_finalResidualNorm   = m_solver->m_final_rnom;
-                      
+      fas_solver.recoverInitialAndFinalRNorms(a_initialResidualNorm, a_finalResidualNorm);
+      /**
+         AMRMultiGrid::solve has a void return value so I am tempted to return something whimsical.
+         This value gets does checked  downstream, so I cannot return  anything interesting.
+      **/                
+      return 0; 
     } //end function solve
 
     ///
@@ -309,7 +492,7 @@ namespace Chombo
                         ConstitutiveRelation* a_constRel,
                         BasalFrictionRelation* a_FrictionRel,
                         const Vector<DisjointBoxLayout>& a_vectGrids,
-                        const Vector<int>& a_vectRefRatio,
+                        const Vector<int>& a_refRat,
                         const RealVect& a_dxCrse,
                         IceThicknessIBC* a_bc,
                         int a_numLevels)
