@@ -21,8 +21,13 @@
 ///
 namespace Chombo
 {
-  typedef           LevelData<FArrayBox>  ch_ldf;
-  typedef              DisjointBoxLayout  ch_dbl;
+  typedef                               FArrayBox  ch_fab;
+  typedef                     LevelData< ch_fab >  ch_ldf;
+  typedef                       DisjointBoxLayout  ch_dbl;
+  typedef                           ProblemDomain  ch_dom;
+  typedef                           DataIterator   ch_dit;
+  typedef                                  MayDay  ch_mayday;
+  typedef                                     Box  ch_box;
   typedef     Base_Simplified_AMRLevelOp< ch_ldf > ch_amrlevelop;
   typedef                AMRFASMultiGrid< ch_ldf > ch_amrfasmg;
   typedef                      MGLevelOp< ch_ldf > ch_mglevelop;
@@ -30,9 +35,6 @@ namespace Chombo
   typedef                    RelaxSolver< ch_ldf > ch_relax_solver;
   typedef                 BiCGStabSolver< ch_ldf > ch_bicgstab_solver;
   typedef              AMRLevelOpFactory< ch_ldf > ch_amrlevelop_fact;
-  typedef   ProblemDomain ch_dom;
-  typedef          MayDay ch_mayday;
-
   ///
   /**
      This is a pass-through class for ViscousTensorOp for the nonlinear ice problem.
@@ -157,16 +159,18 @@ namespace Chombo
     }
     ///
     /**
-       I am indulging in thinking I can finally write a bc function that makes more sense.  This fills corners outside the domain
-       with something reasonable.    As the Boss said, love is bigger than a Honda.  It's bigger than a Subaru.
+       I am indulging in the fantasy that I can finally write a bc function that makes more sense.  
+       This fills corners outside the domain with something reasonable.    
+       As the Boss said, love is bigger than a Honda.  It really is bigger than a Subaru.
     **/
-    void homogDiriBCSide(ch_fab      &      a_state,
-                         const ch_box&      a_valid,
-                         const ch_dom&      a_dom,
-                         int                a_dir,
-                         int                a_side,
-                         int                a_comp,
-                         int                a_nghost)
+    void reflectBCSide(ch_fab      &      a_state,
+                       const ch_box&      a_valid,
+                       const ch_dom&      a_dom,
+                       int                a_dir,
+                       int                a_side,
+                       int                a_comp,
+                       int                a_nghost,
+                       bool a_reflectOdd)
     {
 
       ///only do stuff if we have ghost cells
@@ -179,19 +183,21 @@ namespace Chombo
           isign = -1;
         }
         ch_box offdir_grown_dom_box = a_dom.domainBox();
+        ch_box offdir_grown_valid_b = a_valid;
         for(int idir = 0; idir < SpaceDim; idir++)
         {
           if(idir != a_dir)
           {
             offdir_grown_dom_box.grow(idir, a_nghost);
+            offdir_grown_valid_b.grow(idir, a_nghost);
           }
         }
         //only grow by one.  need the starting cell for a row of ghost
-        ch_box start_box = a_state.box();
-        comp_box.grow(1);
-        comp_box.shift(a_dir, isign);
-        comp_box &= offdir_grown_dom_box;
-        comp_box.shift(a_dir, -isign);
+        ch_box start_box = offdir_grown_valid_b;
+        start_box.grow(1);
+        start_box.shift(a_dir, isign);
+        start_box &= offdir_grown_dom_box;
+        start_box.shift(a_dir, -isign);
         //this should cover (with something reasonable) corners outside the domain
         for (BoxIterator bit(start_box); bit.ok(); ++bit)
         {
@@ -200,62 +206,22 @@ namespace Chombo
           {
             IntVect iv_src =  iv_first_ghost - (ighost+1)*isign*BASISV(a_dir);
             IntVect iv_dst =  iv_first_ghost + ( ighost )*isign*BASISV(a_dir);
-            a_state(iv_dst, a_comp) = -a_state(iv_src, a_comp);
+            Real reflectSign  = 1.;
+            if(a_reflectOdd)
+            {
+              reflectSign = -1;
+            }
+            a_state(iv_dst, a_comp) = reflectSign*a_state(iv_src, a_comp);
           }
         }
       }
     } // end function homogDiriSide
-    /// I know, I know.
-    void homogNeumBCSide(ch_fab      &      a_state,
-                         const ch_box&      a_valid,
-                         const ch_dom&      a_dom,
-                         int                a_dir,
-                         int                a_side,
-                         int                a_comp,
-                         int                a_nghost)
-    {
 
-      ///only do stuff if we have ghost cells
-      if(!a_dom.domainBox().contains(a_state.box()))
-      {
-        ///
-        int isign = 1;
-        if(a_side == 0)
-        {
-          isign = -1;
-        }
-        ch_box offdir_grown_dom_box = a_dom.domainBox();
-        for(int idir = 0; idir < SpaceDim; idir++)
-        {
-          if(idir != a_dir)
-          {
-            offdir_grown_dom_box.grow(idir, a_nghost);
-          }
-        }
-        //only grow by one.  need the starting cell for a row of ghost
-        ch_box start_box = a_state.box();
-        comp_box.grow(1);
-        comp_box.shift(a_dir, isign);
-        comp_box &= offdir_grown_dom_box;
-        comp_box.shift(a_dir, -isign);
-        //this should cover (with something reasonable) corners outside the domain
-        for (BoxIterator bit(start_box); bit.ok(); ++bit)
-        {
-          IntVect iv_first_ghost = bit();
-          for(int ighost = 0; ighost < a_nghost; ighost++)
-          {
-            IntVect iv_src =  iv_first_ghost - (ighost+1)*isign*BASISV(a_dir);
-            IntVect iv_dst =  iv_first_ghost + ( ighost )*isign*BASISV(a_dir);
-            a_state(iv_dst, a_comp) = a_state(iv_src, a_comp);
-          }
-        }
-      }
-    } // end function homogNeumSide
 
     ///
     /**
        From Base_Simplified_AMRLevelOP
-     **/
+    **/
     virtual void
     fillGhostDataOutsideDomain(ch_ldf &          a_lhs,
                                const ch_dom    & a_domain) 
@@ -267,39 +233,28 @@ namespace Chombo
          It is all sorted out by the  bool isDiri function.
          PetscCompGrid does not use the LoHiSide class.    It always was an overdesign, I guess.
       **/
-      DisjointBoxLayout dbl = a_lhs.disjointBoxLayout();
-      DataIterator      dit = a_lhs.dataIterator();
+      ch_dbl dbl = a_lhs.disjointBoxLayout();
+      ch_dit dit = a_lhs.dataIterator();
       int nghost = a_lhs.ghostVect()[0];
       for(int ibox = 0; ibox < dit.size(); ibox++)
       {
         const ch_box& valid =   dbl[dit[ibox]];
-        const ch_fab& state = a_lhs[dit[ibox]];
-      for(int iside = 0; iside < 1; iside++)
-      {
-        for(int idir = 0; idir < SpaceDim; idir++)
+        ch_fab      & state = a_lhs[dit[ibox]];
+        for(int iside = 0; iside < 1; iside++)
         {
-          for(int icomp = 0; icomp < SpaceDim; icomp++)
+          for(int idir = 0; idir < SpaceDim; idir++)
           {
-            bool is_diri = m_bc->isDiri(idir, iside, icomp);
-            if(is_diri)
+            for(int icomp = 0; icomp < SpaceDim; icomp++)
             {
-              void homogDiriBCSide(state,
-                                   valid,
-                                   a_dom,
-                                   idir,
-                                   iside,
-                                   icomp,
-                                   nghost);
-            }
-            else
-            {
-              void homogNeumBCSide(state,
-                                   valid,
-                                   a_dom,
-                                   idir,
-                                   iside,
-                                   icomp,
-                                   nghost);
+              bool is_diri = m_bc->velocitySolveBC()->isDiri(idir, iside, icomp);
+              reflectBCSide(state,
+                            valid,
+                            m_dom,
+                            idir,
+                            iside,
+                            icomp,
+                            nghost,
+                            is_diri);
             }
           }
         }
@@ -326,6 +281,7 @@ namespace Chombo
     fillGhostDataOverCoarseFineInterface(ch_ldf       &  a_phiFine, 
                                          const ch_ldf &  a_phiCoar)
     {
+      //HERE
       TensorCFInterp          m_interpWithCoarser;
       
     }
@@ -480,7 +436,7 @@ namespace Chombo
     {
       ch_mayday::Error("not implmented");
     }
-  }; //end class ChF_Ice_Viscous_Tensor_Op
+    }; //end class ChF_Ice_Viscous_Tensor_Op
   
   typedef ChF_Ice_Viscous_Tensor_Op ch_ice_op;
   /// class to make ChF_Ice_VTO's.   
