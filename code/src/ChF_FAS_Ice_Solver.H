@@ -28,6 +28,7 @@ namespace Chombo
   typedef                           DataIterator   ch_dit;
   typedef                                  MayDay  ch_mayday;
   typedef                                     Box  ch_box;
+  typedef                       LevelFluxRegister  ch_flux_reg;
   typedef     Base_Simplified_AMRLevelOp< ch_ldf > ch_amrlevelop;
   typedef                AMRFASMultiGrid< ch_ldf > ch_amrfasmg;
   typedef                      MGLevelOp< ch_ldf > ch_mglevelop;
@@ -85,7 +86,7 @@ namespace Chombo
     ///this is the local member data (defined at construction)
     /**
        I am trying to keep this at a minimum but more may creep in here for performance reasons.
-     **/
+    **/
     ch_dom                       m_dom;
     ch_dbl                       m_dbl;
     ch_ldf                       m_grad;
@@ -122,13 +123,13 @@ namespace Chombo
       defineLocalData();
     }
 
-    ///
+    ///mostly poached from lib/src/AMRElliptic/ViscousTensorOp.cpp
     virtual void
     prolongIncrement(ch_ldf      & a_phiThisLevel,
                      const ch_ldf& a_correctCoarse)
     {
 
-      CH_TIME("ChF_FAS_Ice_VTO::prolongIncrement");
+      CH_TIME("ChF_ICE_VTO::prolongIncrement");
       
       DisjointBoxLayout dbl = a_phiThisLevel.disjointBoxLayout();
       int mgref = 2; //this is a multigrid func
@@ -173,6 +174,7 @@ namespace Chombo
                        bool a_reflectOdd)
     {
 
+      CH_TIME("CHF_ICE_VTO::reflectBCSide");
       ///only do stuff if we have ghost cells
       if(!a_dom.domainBox().contains(a_state.box()))
       {
@@ -223,16 +225,10 @@ namespace Chombo
        From Base_Simplified_AMRLevelOP
     **/
     virtual void
-    fillGhostDataOutsideDomain(ch_ldf &          a_lhs,
+    fillGhostDataOutsideDomain(ch_ldf          & a_lhs,
                                const ch_dom    & a_domain) 
     {
-      /**
-         Buried in PetscCompGridVTO:
-         public: ///thank god
-         bool m_bcDiri[CH_SPACEDIM][2][CH_SPACEDIM]; // dim, side, Comp: false = Neumann, true: Diri
-         It is all sorted out by the  bool isDiri function.
-         PetscCompGrid does not use the LoHiSide class.    It always was an overdesign, I guess.
-      **/
+      CH_TIME("CHF_ICE_VTO::fillGhostDataOutsideDomain");
       ch_dbl dbl = a_lhs.disjointBoxLayout();
       ch_dit dit = a_lhs.dataIterator();
       int nghost = a_lhs.ghostVect()[0];
@@ -246,7 +242,8 @@ namespace Chombo
           {
             for(int icomp = 0; icomp < SpaceDim; icomp++)
             {
-              bool is_diri = m_bc->velocitySolveBC()->isDiri(idir, iside, icomp);
+              //ye olde slipwall boundary condition
+              bool is_diri = (idir == icomp);
               reflectBCSide(state,
                             valid,
                             m_dom,
@@ -265,6 +262,7 @@ namespace Chombo
     virtual void
     fillGhostDataOverFineFineInterface(ch_ldf &  a_phi) 
     {
+      CH_TIME("CHF_ICE_VTO::fillDataOverFineFineInterface");
       a_phi.exchange();
     }
 
@@ -273,57 +271,141 @@ namespace Chombo
     copyTo(ch_ldf       &  a_dst,
            const ch_ldf &  a_src)
     {
+      CH_TIME("CHF_ICE_VTO::copyTo");
       a_src.copyTo(a_src.interval(), a_dst, a_dst.interval());
     }
     
-    /// 
+
+    ///mostly poached from lib/src/AMRElliptic/ViscousTensorOp.cpp
     virtual void
     fillGhostDataOverCoarseFineInterface(ch_ldf       &  a_phiFine, 
                                          const ch_ldf &  a_phiCoar)
     {
-      //HERE
-      TensorCFInterp          m_interpWithCoarser;
+      CH_TIME("CHF_ICE_VTO::fillGhostDataOverCoarsefineInterface");
+      Real dxfine    = m_dxCrse[0];
+      int  refToCoar = m_refRat[m_startLevel-1];
+      setToZero(m_grad);
+      TensorCFInterp interpWithCoarser(a_phiFine.disjointBoxLayout(),
+                                       a_phiCoar.disjointBoxLayout(),
+                                       dxFiune, refToCoar, SpaceDim, m_dom);
+      interpWithCoarser.coarseFineInterp(a_phiFine, m_grad, a_phiCoar);
       
     }
-    /// amr thing
-    virtual void
-    refluxFineCorrection(ch_ldf       &  a_lphCoar,
-                         const ch_ldf &  a_phiFine, 
-                         const ch_ldf &  a_phiCoar,
-                         ch_amrlevelop*   a_finerOp)
+
+    ///mostly poached from lib/src/AMRElliptic/ViscousTensorOp.cpp
+    void
+    cellGrad(ch_fab        &      a_gradPhi,
+             const ch_fab  &      a_phi,
+             const ch_box  &      a_grid)
     {
-      ch_mayday::Error("not implmented");
+      CH_assert(a_gradPhi.nComp() == SpaceDim*SpaceDim);
+      CH_assert(a_phi.nComp() == SpaceDim);
+
+      for (int derivDir = 0; derivDir < SpaceDim; derivDir++)
+      {
+        for (int phiDir = 0; phiDir < SpaceDim; phiDir++)
+        {
+          int gradcomp = TensorCFInterp::gradIndex(phiDir,derivDir);
+          FORT_CELLGRADVTOP(CHF_FRA1(a_gradPhi, gradcomp),
+                            CHF_CONST_FRA1(a_phi, phiDir),
+                            CHF_BOX(a_grid),
+                            CHF_CONST_REAL(m_dx),
+                            CHF_CONST_INT(derivDir));
+
+        }
+      }
     }
-    
+    ///
+    void
+    fillGrad(const ch_ldf&       a_phi)
+    {
+      CH_TIME("ViscousTensorOp::fillGrad");  
+      LevelData<FArrayBox>& phi = (LevelData<FArrayBox>&)a_phi;
+      phi.exchange(phi.interval(), m_exchangeCopier);
+      const DisjointBoxLayout& grids = a_phi.disjointBoxLayout();
+      //compute gradient of phi for parts NOT in ghost cells
+      for (DataIterator dit = grids.dataIterator(); dit.ok(); ++dit)
+      {
+        cellGrad(m_grad[dit()],
+                 a_phi [dit()],
+                 grids.get(dit()));
+      }
+      m_grad.exchange();
+    }
+    /// called by the coarser level
+    virtual void
+    refluxFineCorrection(ch_ldf       &   a_lphCoar,
+                         const ch_ldf &   a_phiFine, 
+                         const ch_ldf &   a_phiCoar,
+                         ch_amrlevelop*   a_finerBase)
+    {
+      CH_TIME("CHF_ICE_VTO::refluxFineCorrection");
+
+      int refToFine = m_refRat[m_startLevel];
+      ch_dbl dbl_fine = a_phiFine.disjointBoxLayout();
+      ch_dbl dbl_coar = a_phiCoar.disjointBoxLayout();
+      ChF_Ice_Viscous_Tensor_Op*
+        op_f = dynamic_cast<ChF_Ice_Viscous_Tensor_Op*>(a_finerBase);
+      /**
+         VTO skips this step (because of context, I guess).
+         Ergo, the next two lines  may be unnecessary.
+      **/
+      this->fillGrad(a_phiCoar);
+      op_f->fillDataOverCoarseFineInterFace(a_phiFine, a_phiCoar);
+      op_f->fillGrad(a_phiFine);
+      ch_dom dom_fine = refine(m_dom, refToFine);
+      
+      ch_flux_reg flux_reg(dbl_fine, dbl_coar, dom_fine, refToFine, SpaceDim);
+      flux_reg.setToZero();
+      ///HERE I guess I need to figure out the coefficients now
+#if 0      
+      DataIterator dit = a_phiCoar.dataIterator();
+      for (dit.reset(); dit.ok(); ++dit)
+      {
+        const FArrayBox& coarfab    =   a_phi    [dit];
+        const FluxBox&   coareta    = (*m_eta)   [dit];
+        const FluxBox&   coarlambda = (*m_lambda)[dit];
+        const Box&       gridBox    =   a_phi.getBoxes()[dit];
+
+        for (int idir = 0; idir < SpaceDim; idir++)
+        {
+          FArrayBox coarflux;
+          Box faceBox = surroundingNodes(gridBox, idir);
+          //fillgrad was called before this when applyOp was called
+          getFlux(coarflux, coarfab, m_grad[dit()], coareta[idir], coarlambda[idir], faceBox, idir);
+
+          Real scale = 1.0;
+          levfluxreg.incrementCoarse(coarflux, scale,dit(),
+                                     interv,interv,idir);
+        }
+      }
+#endif    
+    }
     ///For this one, the derived class may assume all ghost cells have been set correctly
     virtual void 
     applyOperator(ch_ldf        & a_lph,
                   const ch_ldf  & a_phi)
     {
+      CH_TIME("CHF_ICE_VTO::applyOperator");
       ch_mayday::Error("not implmented");
     }
 
     /// Restrict fine data to coarse data using volume-weighted averaging.   
-    /**
-       Restrict is a c++ keyword, so we are restricted from naming a function restrict.
-       To avoid this restriction, I named the function restriction instead of restrict.
-    **/
     virtual void
     restriction(ch_ldf & a_resCoar,
                 ch_ldf & a_resFine,
                 int ref_rat)
     {
+      CH_TIME("CHF_ICE_VTO::restriction");
       ch_mayday::Error("not implmented");
     }
-
-
-
 
     ///from LinearOp
     virtual void
     create(ch_ldf      & a_lhs,
            const ch_ldf& a_rhs)
     {
+      CH_TIME("CHF_ICE_VTO::create");
       ch_mayday::Error("not implmented");
     }
 
@@ -332,6 +414,7 @@ namespace Chombo
     assign(ch_ldf      & a_lhs,
            const ch_ldf& a_rhs) 
     {
+      CH_TIME("CHF_ICE_VTO::assign");
       ch_mayday::Error("not implmented");
     }
     
@@ -340,6 +423,7 @@ namespace Chombo
     dotProduct(const ch_ldf      & a_1,
                const ch_ldf      & a_2)     
     {
+      CH_TIME("CHF_ICE_VTO::dotProduct");
       Real retval = 4586;
       ch_mayday::Error("not implmented");
       return retval;
@@ -354,6 +438,7 @@ namespace Chombo
          Real          a_a,
          Real          a_b)
     {
+      CH_TIME("CHF_ICE_VTO::axby");
       ch_mayday::Error("not implmented");
     }
 
@@ -361,6 +446,7 @@ namespace Chombo
     virtual Real
     norm(const ch_ldf & a_rhs, int a_ord)
     {
+      CH_TIME("CHF_ICE_VTO::norm");
       Real retval = 4586;
       ch_mayday::Error("not implmented");
       return retval;
@@ -370,6 +456,7 @@ namespace Chombo
     virtual void
     setToZero(ch_ldf & a_lhs)
     {
+      CH_TIME("CHF_ICE_VTO::setToZero");
       ch_mayday::Error("not implmented");
     }
 
@@ -379,6 +466,7 @@ namespace Chombo
                   const ch_ldf& a_fine,
                   bool ghosted)
     {
+      CH_TIME("CHF_ICE_VTO::createCoarser");
       ch_mayday::Error("not implmented");
     }
     
@@ -388,6 +476,7 @@ namespace Chombo
           const ch_ldf& a_residual,
           int a_iterations)
     {
+      CH_TIME("CHF_ICE_VTO::relax");
       ch_mayday::Error("not implmented");
     }
 
@@ -405,6 +494,7 @@ namespace Chombo
                 const ch_ldf& a_coarseCorrection,
                 bool a_skip_res)
     {
+      CH_TIME("CHF_ICE_VTO::AMRRestrict");
       ch_mayday::Error("not implmented");
     }
 
@@ -414,6 +504,7 @@ namespace Chombo
     AMRProlong(ch_ldf      & a_correction,
                const ch_ldf& a_coarseCorrection)
     {
+      CH_TIME("CHF_ICE_VTO::AMRProlong");
       ch_mayday::Error("not implmented");
     }
 
@@ -424,6 +515,7 @@ namespace Chombo
                       const ch_ldf& a_correction,
                       const ch_ldf& a_coarseCorrection)
     {
+      CH_TIME("CHF_ICE_VTO::AMRUpdateResidual");
       ch_mayday::Error("not implmented");
     }
 
@@ -434,11 +526,13 @@ namespace Chombo
                                  const ch_ldf& a_rhs,
                                  const int&     a_refRat)
     {
+      CH_TIME("CHF_ICE_VTO::createCoarsened");
       ch_mayday::Error("not implmented");
     }
-    }; //end class ChF_Ice_Viscous_Tensor_Op
+  }; //end class ChF_Ice_Viscous_Tensor_Op
   
   typedef ChF_Ice_Viscous_Tensor_Op ch_ice_op;
+  
   /// class to make ChF_Ice_VTO's.   
   class ChF_Ice_VTO_Factory: public ch_amrlevelop_fact
   {
@@ -525,24 +619,25 @@ namespace Chombo
       {
         int refRatioToAMR = 1;
         ch_ice_op* ice_op_ptr
-        = new ch_ice_op(  m_coarseDomain       ,
-                          m_constRel           ,
-                          m_basalFrictionRel   ,
-                          m_grids          ,
-                          m_refRat       ,
-                          m_dxCrse             ,
-                          m_bc                 ,
-                          m_numLevels          ,
-                          startLevel,  refRatioToAMR);
+          = new ch_ice_op(  m_coarseDomain    ,
+                            m_constRel        ,
+                            m_basalFrictionRel,
+                            m_grids           ,
+                            m_refRat          ,
+                            m_dxCrse          ,
+                            m_bc              ,
+                            m_numLevels       ,
+                            startLevel        ,
+                            refRatioToAMR     );
         retval = static_cast<ch_amrlevelop*>(ice_op_ptr);
       }
       return retval;
     }
 
     ///
-    virtual ch_mglevelop* MGnewOp(const ch_dom       & a_indexSpace,
-                                  int                  a_depth,
-                                  bool                 a_homoOnly = true)
+    virtual ch_mglevelop* MGnewOp(const ch_dom  & a_indexSpace,
+                                  int             a_depth,
+                                  bool            a_homoOnly = true)
     {
       int startLevel = 4586;
       bool found = false;
@@ -559,18 +654,18 @@ namespace Chombo
       }
       bool coarsenable = false;
       int refRatioToAMR = 4586;
-        if(found)
+      if(found)
+      {
+        const ch_dbl & startGrids = m_grids[startLevel];
+        int mg_ref_ratio = 1;  
+        for(int img = 0; img < a_depth; img++)
         {
-          const ch_dbl & startGrids = m_grids[startLevel];
-          int mg_ref_ratio = 1;  
-          for(int img = 0; img < a_depth; img++)
-          {
-            mg_ref_ratio *= 2;
-          }
-          refRatioToAMR= mg_ref_ratio;
-          //we want at least 2 points in each direction
-          coarsenable = (startGrids.coarsenable(2*mg_ref_ratio));
+          mg_ref_ratio *= 2;
         }
+        refRatioToAMR= mg_ref_ratio;
+        //we want at least 2 points in each direction
+        coarsenable = (startGrids.coarsenable(2*mg_ref_ratio));
+      }
       ch_amrlevelop* retval = NULL;
       if(found && coarsenable)
       {
@@ -620,22 +715,22 @@ namespace Chombo
     ProblemDomain              m_coarseDomain       ;
     ConstitutiveRelation*      m_constRel           ;
     BasalFrictionRelation*     m_basalFrictionRel   ;
-    Vector<DisjointBoxLayout>  m_grids          ;
-    Vector<int>                m_refRat       ;
+    Vector<DisjointBoxLayout>  m_grids              ;
+    Vector<int>                m_refRat             ;
     RealVect                   m_dxCrse             ;
     IceThicknessIBC*           m_bc                 ;
     int                        m_numLevels          ;
 
 
     ///strong construction only 
-    ChF_FAS_Ice_Solver(const ProblemDomain&              a_coarseDomain       ,
-                       ConstitutiveRelation*             a_constRel           ,
-                       BasalFrictionRelation*            a_basalFrictionRel   ,
-                       const Vector<DisjointBoxLayout>&  a_grids          ,
-                       const Vector<int>&                a_refRat       ,
-                       const RealVect&                   a_dxCrse             ,
-                       IceThicknessIBC*                  a_bc                 ,
-                       int                               a_numLevels          )
+    ChF_FAS_Ice_Solver(const ProblemDomain&              a_coarseDomain    ,
+                       ConstitutiveRelation*             a_constRel        ,
+                       BasalFrictionRelation*            a_basalFrictionRel,
+                       const Vector<DisjointBoxLayout>&  a_grids           ,
+                       const Vector<int>&                a_refRat          ,
+                       const RealVect&                   a_dxCrse          ,
+                       IceThicknessIBC*                  a_bc              ,
+                       int                               a_numLevels       )
     :IceVelocitySolver()
     {
       m_coarseDomain       =  a_coarseDomain    ;
@@ -694,8 +789,9 @@ namespace Chombo
 
     ///
     /**
-       Mandated by the IceVelocitySolver API.
-       This should not get called as this class uses strong construction
+       This function is mandated by the IceVelocitySolver API, 
+       so this function is needed to get stuff to compile.
+       That said, I never call this particular function, so it is just a placeholder.
     **/
     virtual void define(const ProblemDomain& a_coarseDomain,
                         ConstitutiveRelation* a_constRel,
@@ -706,7 +802,7 @@ namespace Chombo
                         IceThicknessIBC* a_bc,
                         int a_numLevels)
     {
-      ch_mayday::Error("How did this get called after all my fiendish plans?");
+      ch_mayday::Error("How did this get called?");
     }
   }; //end  class fas ice solver 
 
