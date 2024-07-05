@@ -31,19 +31,25 @@
 class ChF_Ice_Viscous_Tensor_Op:  public Base_Simplified_AMRLevelOp< LevelData<FArrayBox> >
 {
 public:
-  typedef                               FArrayBox  ch_fab;
-  typedef                     LevelData< ch_fab >  ch_ldf;
-  typedef                       DisjointBoxLayout  ch_dbl;
-  typedef                           ProblemDomain  ch_dom;
-  typedef                           DataIterator   ch_dit;
-  typedef                                  MayDay  ch_mayday;
-  typedef                                     Box  ch_box;
-  typedef                       LevelFluxRegister  ch_flux_reg;
-  typedef                AMRFASMultiGrid< ch_ldf > ch_amrfasmg;
-  typedef                      MGLevelOp< ch_ldf > ch_mglevelop;
-  typedef                   LinearSolver< ch_ldf > ch_linear_solver;
-  typedef                    RelaxSolver< ch_ldf > ch_relax_solver;
-  typedef                 BiCGStabSolver< ch_ldf > ch_bicgstab_solver;
+  typedef                     ChF_Ice_Viscous_Tensor_Op  ch_ice_op;
+  typedef                                     FArrayBox  ch_fab_cell;
+  typedef                                       FluxBox  ch_fab_flux;
+  typedef                             DisjointBoxLayout  ch_dbl;
+  typedef                                 ProblemDomain  ch_dom;
+  typedef                                  DataIterator  ch_dit;
+  typedef                                        MayDay  ch_mayday;
+  typedef                                           Box  ch_box;
+  typedef                             LevelFluxRegister  ch_flux_reg;
+  typedef                      LevelData< ch_fab_flux >  ch_ldf_flux;
+  typedef                      LevelData< ch_fab_cell >  ch_ldf_cell;
+  typedef     Base_Simplified_AMRLevelOp< ch_ldf_cell >  ch_amrlevelop;
+  typedef                AMRFASMultiGrid< ch_ldf_cell >  ch_amrfasmg;
+  typedef                      MGLevelOp< ch_ldf_cell >  ch_mglevelop;
+  typedef                   LinearSolver< ch_ldf_cell >  ch_linear_solver;
+  typedef                    RelaxSolver< ch_ldf_cell >  ch_relax_solver;
+  typedef                 BiCGStabSolver< ch_ldf_cell >  ch_bicgstab_solver;
+  typedef              AMRLevelOpFactory< ch_ldf_cell >  ch_amrlevelop_fact;
+
 private:
   ///strong construction only
   ChF_Ice_Viscous_Tensor_Op();
@@ -90,7 +96,7 @@ private:
   **/
   ch_dom                       m_dom;
   ch_dbl                       m_dbl;
-  ch_ldf                       m_grad;
+  ch_ldf_cell                  m_grad;
   Real                         m_dx;
 
       
@@ -98,6 +104,22 @@ public:
   ///destructor  is trivial but has to be virtual
   virtual ~ChF_Ice_Viscous_Tensor_Op(){;}
 
+  ///
+  /**
+     compute coefficients needed for the operator given an input state and all that other stuff we saved.
+  **/
+  void  computeCoefficients( RefCountedPtr< ch_ldf_flux >       &      a_eta,
+                             RefCountedPtr< ch_ldf_flux >       &      a_lambda,
+                             RefCountedPtr< ch_ldf_cell >       &      a_acoef,
+                             Real                               &      a_alpha,
+                             Real                               &      a_beta,
+                             const ch_ldf_cell                  &      a_phi)
+
+  {
+    ch_mayday::Error("ChF_Ice_VTO::computeCoefficients not implemented yet.");
+  }
+      
+  
   /// 
   ChF_Ice_Viscous_Tensor_Op(const ch_dom                   &  a_coarseDomain       ,
                             ConstitutiveRelation           *  a_constRel           ,
@@ -126,8 +148,8 @@ public:
 
   ///mostly poached from lib/src/AMRElliptic/ViscousTensorOp.cpp
   virtual void
-  prolongIncrement(ch_ldf      & a_phiThisLevel,
-                   const ch_ldf& a_correctCoarse)
+  prolongIncrement(ch_ldf_cell      & a_phiThisLevel,
+                   const ch_ldf_cell& a_correctCoarse)
   {
 
     CH_TIME("ChF_ICE_VTO::prolongIncrement");
@@ -155,7 +177,7 @@ public:
     
   ///
   virtual ch_dom
-  getDomainFromData(const ch_ldf & a_data)
+  getDomainFromData(const ch_ldf_cell & a_data)
   {
     return a_data.disjointBoxLayout().physDomain();
   }
@@ -165,7 +187,7 @@ public:
      This fills corners outside the domain with something reasonable.    
      As the Boss said, love is bigger than a Honda.  It really is bigger than a Subaru.
   **/
-  void reflectBCSide(ch_fab      &      a_state,
+  void reflectBCSide(ch_fab_cell      &      a_state,
                      const ch_box&      a_valid,
                      const ch_dom&      a_dom,
                      int                a_dir,
@@ -226,7 +248,7 @@ public:
        From Base_Simplified_AMRLevelOP
     **/
   virtual void
-  fillGhostDataOutsideDomain(ch_ldf          & a_lhs,
+  fillGhostDataOutsideDomain(ch_ldf_cell          & a_lhs,
                              const ch_dom    & a_domain) 
   {
     CH_TIME("CHF_ICE_VTO::fillGhostDataOutsideDomain");
@@ -236,7 +258,7 @@ public:
     for(int ibox = 0; ibox < dit.size(); ibox++)
     {
       const ch_box& valid =   dbl[dit[ibox]];
-      ch_fab      & state = a_lhs[dit[ibox]];
+      ch_fab_cell      & state = a_lhs[dit[ibox]];
       for(int iside = 0; iside < 1; iside++)
       {
         for(int idir = 0; idir < SpaceDim; idir++)
@@ -261,7 +283,7 @@ public:
 
   ///
   virtual void
-  fillGhostDataOverFineFineInterface(ch_ldf &  a_phi) 
+  fillGhostDataOverFineFineInterface(ch_ldf_cell &  a_phi) 
   {
     CH_TIME("CHF_ICE_VTO::fillDataOverFineFineInterface");
     a_phi.exchange();
@@ -269,8 +291,8 @@ public:
 
   ///
   virtual void
-  copyTo(ch_ldf       &  a_dst,
-         const ch_ldf &  a_src)
+  copyTo(ch_ldf_cell       &  a_dst,
+         const ch_ldf_cell &  a_src)
   {
     CH_TIME("CHF_ICE_VTO::copyTo");
     a_src.copyTo(a_src.interval(), a_dst, a_dst.interval());
@@ -279,8 +301,8 @@ public:
 
   ///mostly poached from lib/src/AMRElliptic/ViscousTensorOp.cpp
   virtual void
-  fillGhostDataOverCoarseFineInterface(ch_ldf       &  a_phiFine, 
-                                       const ch_ldf &  a_phiCoar)
+  fillGhostDataOverCoarseFineInterface(ch_ldf_cell       &  a_phiFine, 
+                                       const ch_ldf_cell &  a_phiCoar)
   {
     CH_TIME("CHF_ICE_VTO::fillGhostDataOverCoarsefineInterface");
     Real    dx_fine = m_dx;
@@ -300,8 +322,8 @@ public:
 
   ///mostly poached from lib/src/AMRElliptic/ViscousTensorOp.cpp
   void
-  cellGrad(ch_fab        &      a_gradPhi,
-           const ch_fab  &      a_phi,
+  cellGrad(ch_fab_cell        &      a_gradPhi,
+           const ch_fab_cell  &      a_phi,
            const ch_box  &      a_grid)
   {
     CH_assert(a_gradPhi.nComp() == SpaceDim*SpaceDim);
@@ -323,7 +345,7 @@ public:
   }
   ///
   void
-  fillGrad(const ch_ldf&       a_phi)
+  fillGrad(const ch_ldf_cell&       a_phi)
   {
     CH_TIME("ViscousTensorOp::fillGrad");  
     LevelData<FArrayBox>& phi = (LevelData<FArrayBox>&)a_phi;
@@ -338,15 +360,226 @@ public:
     }
     m_grad.exchange();
   }
-  /// called by the coarser level
+  ///poached from Chombo/lib/src/AMRElliptic/ViscousTensorOp
+  void
+  loHiCenterFace(Box&                 a_loBox,
+                 int&                 a_hasLo,
+                 Box&                 a_hiBox,
+                 int&                 a_hasHi,
+                 Box&                 a_centerBox,
+                 const ProblemDomain& a_eblg,
+                 const Box&           a_inBox,
+                 const int&           a_dir)
+  {
+
+    // if we're periodic in a_dir, then all boxes are
+    // contained in the domain (DFM 2/5/10)
+    if (a_eblg.isPeriodic(a_dir) )
+    {
+      a_centerBox = a_inBox;
+      a_hasLo = 0;
+      a_hasHi = 0;
+    } // end if periodic in a_dir
+    else
+    {
+      Box domainFaceBox = a_eblg.domainBox();
+      domainFaceBox.surroundingNodes(a_dir);
+
+      // Make a copy of the input box which can be modified
+      Box inBox = a_inBox;
+
+      inBox &= domainFaceBox;
+
+      a_centerBox = inBox;
+      a_centerBox.grow(a_dir, 1);
+      a_centerBox &= domainFaceBox;
+      a_centerBox.grow(a_dir,-1);
+
+      // See if this chops off the high side of the input box
+      Box tmp = inBox;
+      tmp.shift(a_dir,1);
+      tmp &= domainFaceBox;
+      tmp.shift(a_dir,-1);
+
+      // If so, set up the high, one-sided difference box, a_hiBox
+      if (tmp != inBox)
+      {
+        a_hasHi = 1;
+        a_hiBox = bdryHi(inBox,a_dir,1);
+      }
+      else
+      {
+        a_hasHi = 0;
+      }
+
+      // See if this chops off the low side of the input box
+      tmp = inBox;
+      tmp.shift(a_dir,-1);
+      tmp &= domainFaceBox;
+      tmp.shift(a_dir,1);
+
+      // If so, set up the low, one-sided difference box, a_loBox
+      if (tmp != inBox)
+      {
+        a_hasLo = 1;
+        a_loBox = bdryLo(inBox,a_dir,1);
+      }
+      else
+      {
+        a_hasLo = 0;
+      }
+    } // end if not periodic in a_dir
+  } //end function loHiCenterFace
+
+  /// another refugee from AMRElliptic VTO
+  void
+  getFaceDivAndGrad(FArrayBox&             a_faceDiv,
+                    FArrayBox&             a_faceGrad,
+                    const FArrayBox&       a_data,
+                    const FArrayBox&       a_gradData,
+                    const ProblemDomain&   a_domain,
+                    const Box&             a_faceBox,
+                    const int&             a_faceDir,
+                    const Real             a_dx)
+  {
+    //set divergence to zero everywhere
+    a_faceDiv.setVal(0.);
+
+    Box interiorFaceBox ;
+    Box loBoxFace, hiBoxFace;
+    int hasLo, hasHi;
+
+    loHiCenterFace(loBoxFace, hasLo,
+                   hiBoxFace, hasHi,
+                   interiorFaceBox,
+                   a_domain,
+                   a_faceBox,
+                   a_faceDir);
+
+    for (int divDir = 0; divDir < SpaceDim; divDir++)
+    {
+      int gradComp = TensorCFInterp::gradIndex(divDir,divDir);
+      FORT_FACEDIVINCRVTOP(CHF_FRA1(a_faceDiv, 0),
+                           CHF_FRA(a_data),
+                           CHF_FRA(a_gradData),
+                           CHF_BOX(a_faceBox),
+                           CHF_BOX(interiorFaceBox),
+                           CHF_BOX(loBoxFace),
+                           CHF_INT(hasLo),
+                           CHF_BOX(hiBoxFace),
+                           CHF_INT(hasHi),
+                           CHF_REAL(a_dx),
+                           CHF_INT(a_faceDir),
+                           CHF_INT(divDir),
+                           CHF_INT(gradComp));
+
+      //now average cell-centered gradients to the face centers
+      //use diffs in data if divDir == faceDir
+    }
+
+    for (int divDir = 0; divDir < SpaceDim; divDir++)
+    {
+      for (int velDir = 0; velDir < SpaceDim; velDir++)
+      {
+        int gradcomp = TensorCFInterp::gradIndex(velDir,divDir);
+        FORT_GETFACEGRADVTOP(CHF_FRA1(a_faceGrad, gradcomp),
+                             CHF_FRA1(a_gradData, gradcomp),
+                             CHF_FRA1(a_data, velDir),
+                             CHF_BOX(a_faceBox),
+                             CHF_BOX(interiorFaceBox),
+                             CHF_BOX(loBoxFace),
+                             CHF_INT(hasLo),
+                             CHF_BOX(hiBoxFace),
+                             CHF_INT(hasHi),
+                             CHF_REAL(a_dx),
+                             CHF_INT(a_faceDir),
+                             CHF_INT(divDir));
+
+      }
+
+    }
+  } //end function getfacedivandgrad
+
+  /**
+     adapted from Chombo/lib/src/AMRElliptic/VTO
+  **/
+  void
+  getFlux(FArrayBox&       a_flux,
+          const FArrayBox& a_data,
+          const FArrayBox& a_gradData,
+          const FArrayBox& a_etaFace,
+          const FArrayBox& a_lambdaFace,
+          const Box&       a_faceBox,
+          int              a_dir,
+          Real             a_beta)
+  {
+    CH_TIME("ViscousTensorOp::getflux");  
+
+    CH_assert(a_data.nComp() == SpaceDim);
+    a_flux.resize(a_faceBox, a_data.nComp());
+    FArrayBox  faceDiv(a_faceBox, 1);
+    FArrayBox  faceGrad(a_faceBox, a_gradData.nComp());
+    getFaceDivAndGrad(faceDiv, faceGrad, a_data, a_gradData, m_dom, a_faceBox, a_dir, m_dx);
+
+    getFluxFromDivAndGrad(a_flux, faceDiv, faceGrad, a_etaFace, a_lambdaFace, a_faceBox, a_dir);
+    a_flux *= a_beta;
+  }
+  
+  /**
+     From Ye Olde VTO.
+  **/
+  void
+  getFluxFromDivAndGrad(FArrayBox&       a_flux,
+                        const FArrayBox& a_faceDiv,
+                        const FArrayBox& a_faceGrad,
+                        const FArrayBox& a_etaFace,
+                        const FArrayBox& a_lambdaFace,
+                        const Box&       a_faceBox,
+                        int              a_dir)
+
+  {
+    CH_TIME("ViscousTensorOp::getFluxFromDivAndGrad");  
+    //copy the divergence into the diagonal component of the flux
+    //diagonal component of the flux is the a_dir comp
+    int dstcomp = a_dir;
+    int srccomp = 0;
+    int numcomp = 1;
+
+    //this is important because we increment later
+    a_flux.setVal(0.);
+
+    //now make diag component of f = div v
+    a_flux.copy(a_faceDiv, srccomp, dstcomp, numcomp);
+    //the flux now contains div v * I
+
+    //now flux gets multiplied by lambda
+    a_flux.mult(a_lambdaFace, srccomp, dstcomp, 1);
+
+    //the flux now contains div v * lambda * I
+    //now add in eta*(grad v + (grad v)^T)
+    for (int idir = 0; idir < SpaceDim; idir++)
+    {
+      int fluxComp = idir;
+      int gradComp = TensorCFInterp::gradIndex(idir,a_dir);
+      int tranComp = TensorCFInterp::gradIndex(a_dir, idir);
+      FORT_ADDGRADTOFLUXVTOP(CHF_FRA(a_flux),
+                             CHF_CONST_FRA1(a_etaFace,0),
+                             CHF_CONST_INT(fluxComp),
+                             CHF_CONST_FRA(a_faceGrad),
+                             CHF_CONST_INT(gradComp),
+                             CHF_CONST_INT(tranComp),
+                             CHF_BOX(a_faceBox));
+    }
+  } //end function get flux from div and grad
+/// called by the coarser level
   virtual void
-  refluxFineCorrection(ch_ldf       &   a_lphCoar,
-                       const ch_ldf &   a_phiFine, 
-                       const ch_ldf &   a_phiCoar,
-                       ch_amrlevelop*   a_finerBase)
+  refluxFineCorrection(ch_ldf_cell       &   a_lphCoar,
+                       const ch_ldf_cell &   a_phiFine, 
+                       const ch_ldf_cell &   a_phiCoar,
+                       AMRLevelOp<ch_ldf_cell>*   a_finerBase)
   {
     CH_TIME("CHF_ICE_VTO::refluxFineCorrection");
-
+    Interval interv(0, SpaceDim-1);
     int refToFine = m_refRat[m_startLevel];
     ch_dbl dbl_fine = a_phiFine.disjointBoxLayout();
     ch_dbl dbl_coar = a_phiCoar.disjointBoxLayout();
@@ -357,78 +590,116 @@ public:
        Ergo, the next two lines  may be unnecessary.
     **/
     this->fillGrad(a_phiCoar);
-    ch_ldf& phi_fine_cast = (ch_ldf&)a_phiFine;
+    ch_ldf_cell& phi_fine_cast = (ch_ldf_cell&)a_phiFine;
     op_f->fillGhostDataOverCoarseFineInterface(phi_fine_cast, a_phiCoar);
     op_f->fillGrad(a_phiFine);
     ch_dom dom_fine = refine(m_dom, refToFine);
       
     ch_flux_reg flux_reg(dbl_fine, dbl_coar, dom_fine, refToFine, SpaceDim);
     flux_reg.setToZero();
-    ///HERE I guess I need to figure out the coefficients now
-#if 0      
-    DataIterator dit = a_phiCoar.dataIterator();
-    for (dit.reset(); dit.ok(); ++dit)
+    RefCountedPtr< ch_ldf_flux >          eta_fine,   eta_coar;
+    RefCountedPtr< ch_ldf_flux >       lambda_fine,lambda_coar;
+    RefCountedPtr< ch_ldf_cell >        acoef_fine, acoef_coar;
+    Real                                alpha_fine, alpha_coar;
+    Real                                 beta_fine,  beta_coar;
+    this->computeCoefficients( eta_coar, lambda_coar, acoef_coar, alpha_coar, beta_coar, a_phiCoar);
+    op_f->computeCoefficients( eta_fine, lambda_fine, acoef_fine, alpha_fine, beta_fine, a_phiFine);
+    CH_assert(std::abs(alpha_coar - alpha_fine) < 1.0e-10);
+    CH_assert(std::abs( beta_coar -  beta_fine) < 1.0e-10);
+    Real alpha = alpha_coar; Real beta = beta_coar;
+
+
     {
-      const FArrayBox& coarfab    =   a_phi    [dit];
-      const FluxBox&   coareta    = (*m_eta)   [dit];
-      const FluxBox&   coarlambda = (*m_lambda)[dit];
-      const Box&       gridBox    =   a_phi.getBoxes()[dit];
-
-      for (int idir = 0; idir < SpaceDim; idir++)
+      //coarse bit
+      DataIterator dit = a_phiCoar.dataIterator();
+      for (dit.reset(); dit.ok(); ++dit)
       {
-        FArrayBox coarflux;
-        Box faceBox = surroundingNodes(gridBox, idir);
-        //fillgrad was called before this when applyOp was called
-        getFlux(coarflux, coarfab, m_grad[dit()], coareta[idir], coarlambda[idir], faceBox, idir);
+        const FArrayBox& coarfab    =    a_phiCoar[dit];
+        const FluxBox&   coareta    =    (*eta_coar)[dit];
+        const FluxBox&   coarlambda = (*lambda_coar)[dit];
+        const Box&       gridBox    =   a_phiCoar.getBoxes()[dit];
 
-        Real scale = 1.0;
-        levfluxreg.incrementCoarse(coarflux, scale,dit(),
+        for (int idir = 0; idir < SpaceDim; idir++)
+        {
+          FArrayBox coarflux;
+          Box faceBox = surroundingNodes(gridBox, idir);
+          //fillgrad was called before this when applyOp was called
+          this->getFlux(coarflux, coarfab, m_grad[dit()], coareta[idir], coarlambda[idir], faceBox, idir, beta);
+
+          Real scale = 1.0;
+          flux_reg.incrementCoarse(coarflux, scale,dit(),
                                    interv,interv,idir);
+        }
       }
     }
-#endif    
+    {
+      //fine bit
+      DataIterator dit = a_phiFine.dataIterator();
+      for (dit.reset(); dit.ok(); ++dit)
+      {
+        const FArrayBox& finefab    =    a_phiFine[dit];
+        const FluxBox&   fineeta    =    (*eta_fine)[dit];
+        const FluxBox&   finelambda = (*lambda_fine)[dit];
+        const Box&       gridBox    =   a_phiFine.getBoxes()[dit];
+
+        for (int idir = 0; idir < SpaceDim; idir++)
+        {
+          FArrayBox fineflux;
+          Box faceBox = surroundingNodes(gridBox, idir);
+          //fillgrad was called before this when applyOp was called
+          op_f->getFlux(fineflux, finefab, op_f->m_grad[dit()], fineeta[idir], finelambda[idir], faceBox, idir, beta);
+
+          Real scale = 1.0;
+          flux_reg.incrementFine(fineflux, scale,dit(),
+                                 interv,interv,idir);
+        }
+      }
+    }
+    Real scale =  beta/this->m_dx;
+    flux_reg.reflux(a_lphCoar, scale);
+
   }
-  ///For this one, the derived class may assume all ghost cells have been set correctly
+///For this one, the derived class may assume all ghost cells have been set correctly
   virtual void 
-  applyOperator(ch_ldf        & a_lph,
-                const ch_ldf  & a_phi)
+  applyOperator(ch_ldf_cell        & a_lph,
+                const ch_ldf_cell  & a_phi)
   {
     CH_TIME("CHF_ICE_VTO::applyOperator");
     ch_mayday::Error("not implmented");
   }
 
-  /// Restrict fine data to coarse data using volume-weighted averaging.   
+/// Restrict fine data to coarse data using volume-weighted averaging.   
   virtual void
-  restriction(ch_ldf & a_resCoar,
-              ch_ldf & a_resFine,
+  restriction(ch_ldf_cell & a_resCoar,
+              ch_ldf_cell & a_resFine,
               int ref_rat)
   {
     CH_TIME("CHF_ICE_VTO::restriction");
     ch_mayday::Error("not implmented");
   }
 
-  ///from LinearOp
+///from LinearOp
   virtual void
-  create(ch_ldf      & a_lhs,
-         const ch_ldf& a_rhs)
+  create(ch_ldf_cell      & a_lhs,
+         const ch_ldf_cell& a_rhs)
   {
     CH_TIME("CHF_ICE_VTO::create");
     ch_mayday::Error("not implmented");
   }
 
-  ///from LinearOp
+///from LinearOp
   virtual void
-  assign(ch_ldf      & a_lhs,
-         const ch_ldf& a_rhs) 
+  assign(ch_ldf_cell      & a_lhs,
+         const ch_ldf_cell& a_rhs) 
   {
     CH_TIME("CHF_ICE_VTO::assign");
     ch_mayday::Error("not implmented");
   }
     
-  ///from LinearOp
+///from LinearOp
   virtual Real
-  dotProduct(const ch_ldf      & a_1,
-             const ch_ldf      & a_2)     
+  dotProduct(const ch_ldf_cell      & a_1,
+             const ch_ldf_cell      & a_2)     
   {
     CH_TIME("CHF_ICE_VTO::dotProduct");
     Real retval = 4586;
@@ -437,11 +708,11 @@ public:
   }
 
 
-  ///from LinearOp
+///from LinearOp
   virtual void
-  axby(ch_ldf      & a_lhs,
-       const ch_ldf& a_x,
-       const ch_ldf& a_y,
+  axby(ch_ldf_cell      & a_lhs,
+       const ch_ldf_cell& a_x,
+       const ch_ldf_cell& a_y,
        Real          a_a,
        Real          a_b)
   {
@@ -449,9 +720,9 @@ public:
     ch_mayday::Error("not implmented");
   }
 
-  ///from LinearOp
+///from LinearOp
   virtual Real
-  norm(const ch_ldf & a_rhs, int a_ord)
+  norm(const ch_ldf_cell & a_rhs, int a_ord)
   {
     CH_TIME("CHF_ICE_VTO::norm");
     Real retval = 4586;
@@ -459,28 +730,28 @@ public:
     return retval;
   }
     
-  ///from LinearOp
+///from LinearOp
   virtual void
-  setToZero(ch_ldf & a_lhs)
+  setToZero(ch_ldf_cell & a_lhs)
   {
     CH_TIME("CHF_ICE_VTO::setToZero");
     ch_mayday::Error("not implmented");
   }
 
-  ///from MGLevelOp
+///from MGLevelOp
   virtual void
-  createCoarser(ch_ldf      & a_coarse,
-                const ch_ldf& a_fine,
+  createCoarser(ch_ldf_cell      & a_coarse,
+                const ch_ldf_cell& a_fine,
                 bool ghosted)
   {
     CH_TIME("CHF_ICE_VTO::createCoarser");
     ch_mayday::Error("not implmented");
   }
     
-  ///from MGLevelOp
+///from MGLevelOp
   virtual void
-  relax(ch_ldf      & a_correction,
-        const ch_ldf& a_residual,
+  relax(ch_ldf_cell      & a_correction,
+        const ch_ldf_cell& a_residual,
         int a_iterations)
   {
     CH_TIME("CHF_ICE_VTO::relax");
@@ -495,42 +766,42 @@ public:
   }
     
   virtual void
-  AMRRestrict(ch_ldf      & a_resCoarse,
-              const ch_ldf& a_residual,
-              const ch_ldf& a_correction,
-              const ch_ldf& a_coarseCorrection,
+  AMRRestrict(ch_ldf_cell      & a_resCoarse,
+              const ch_ldf_cell& a_residual,
+              const ch_ldf_cell& a_correction,
+              const ch_ldf_cell& a_coarseCorrection,
               bool a_skip_res)
   {
     CH_TIME("CHF_ICE_VTO::AMRRestrict");
     ch_mayday::Error("not implmented");
   }
 
-  ///
-  /** a_correction += I[2h->h](a_coarseCorrection) */
+///
+/** a_correction += I[2h->h](a_coarseCorrection) */
   virtual void
-  AMRProlong(ch_ldf      & a_correction,
-             const ch_ldf& a_coarseCorrection)
+  AMRProlong(ch_ldf_cell      & a_correction,
+             const ch_ldf_cell& a_coarseCorrection)
   {
     CH_TIME("CHF_ICE_VTO::AMRProlong");
     ch_mayday::Error("not implmented");
   }
 
-  ///
-  /** a_residual = a_residual - L(a_correction, a_coarseCorrection) */
+///
+/** a_residual = a_residual - L(a_correction, a_coarseCorrection) */
   virtual void
-  AMRUpdateResidual(ch_ldf      & a_residual,
-                    const ch_ldf& a_correction,
-                    const ch_ldf& a_coarseCorrection)
+  AMRUpdateResidual(ch_ldf_cell      & a_residual,
+                    const ch_ldf_cell& a_correction,
+                    const ch_ldf_cell& a_coarseCorrection)
   {
     CH_TIME("CHF_ICE_VTO::AMRUpdateResidual");
     ch_mayday::Error("not implmented");
   }
 
-  ///
-  /**
-   */
-  virtual void createCoarsened(ch_ldf&       a_lhs,
-                               const ch_ldf& a_rhs,
+///
+/**
+ */
+  virtual void createCoarsened(ch_ldf_cell&       a_lhs,
+                               const ch_ldf_cell& a_rhs,
                                const int&     a_refRat)
   {
     CH_TIME("CHF_ICE_VTO::createCoarsened");
@@ -543,22 +814,24 @@ public:
 class ChF_Ice_VTO_Factory: public AMRLevelOpFactory< LevelData<FArrayBox> >
 {
 public:
-  typedef               ChF_Ice_Viscous_Tensor_Op  ch_ice_op;
-  typedef                               FArrayBox  ch_fab;
-  typedef                     LevelData< ch_fab >  ch_ldf;
-  typedef                       DisjointBoxLayout  ch_dbl;
-  typedef                           ProblemDomain  ch_dom;
-  typedef                           DataIterator   ch_dit;
-  typedef                                  MayDay  ch_mayday;
-  typedef                                     Box  ch_box;
-  typedef                       LevelFluxRegister  ch_flux_reg;
-  typedef     Base_Simplified_AMRLevelOp< ch_ldf > ch_amrlevelop;
-  typedef                AMRFASMultiGrid< ch_ldf > ch_amrfasmg;
-  typedef                      MGLevelOp< ch_ldf > ch_mglevelop;
-  typedef                   LinearSolver< ch_ldf > ch_linear_solver;
-  typedef                    RelaxSolver< ch_ldf > ch_relax_solver;
-  typedef                 BiCGStabSolver< ch_ldf > ch_bicgstab_solver;
-  typedef              AMRLevelOpFactory< ch_ldf > ch_amrlevelop_fact;
+  typedef                     ChF_Ice_Viscous_Tensor_Op  ch_ice_op;
+  typedef                                     FArrayBox  ch_fab_cell;
+  typedef                                       FluxBox  ch_fab_flux;
+  typedef                             DisjointBoxLayout  ch_dbl;
+  typedef                                 ProblemDomain  ch_dom;
+  typedef                                  DataIterator  ch_dit;
+  typedef                                        MayDay  ch_mayday;
+  typedef                                           Box  ch_box;
+  typedef                             LevelFluxRegister  ch_flux_reg;
+  typedef                      LevelData< ch_fab_flux >  ch_ldf_flux;
+  typedef                      LevelData< ch_fab_cell >  ch_ldf_cell;
+  typedef     Base_Simplified_AMRLevelOp< ch_ldf_cell >  ch_amrlevelop;
+  typedef                AMRFASMultiGrid< ch_ldf_cell >  ch_amrfasmg;
+  typedef                      MGLevelOp< ch_ldf_cell >  ch_mglevelop;
+  typedef                   LinearSolver< ch_ldf_cell >  ch_linear_solver;
+  typedef                    RelaxSolver< ch_ldf_cell >  ch_relax_solver;
+  typedef                 BiCGStabSolver< ch_ldf_cell >  ch_bicgstab_solver;
+  typedef              AMRLevelOpFactory< ch_ldf_cell >  ch_amrlevelop_fact;
   ///
   /**
      The only member data for this class is the stuff that comes in through the constructor.   
@@ -723,21 +996,21 @@ typedef ChF_Ice_VTO_Factory ch_ice_fact;
 **/
 class ChF_FAS_Ice_Solver : public IceVelocitySolver
 {
-  typedef                               FArrayBox  ch_fab;
-  typedef                     LevelData< ch_fab >  ch_ldf;
-  typedef                       DisjointBoxLayout  ch_dbl;
-  typedef                           ProblemDomain  ch_dom;
-  typedef                           DataIterator   ch_dit;
-  typedef                                  MayDay  ch_mayday;
-  typedef                                     Box  ch_box;
-  typedef                       LevelFluxRegister  ch_flux_reg;
-  typedef     Base_Simplified_AMRLevelOp< ch_ldf > ch_amrlevelop;
-  typedef                AMRFASMultiGrid< ch_ldf > ch_amrfasmg;
-  typedef                      MGLevelOp< ch_ldf > ch_mglevelop;
-  typedef                   LinearSolver< ch_ldf > ch_linear_solver;
-  typedef                    RelaxSolver< ch_ldf > ch_relax_solver;
-  typedef                 BiCGStabSolver< ch_ldf > ch_bicgstab_solver;
-  typedef              AMRLevelOpFactory< ch_ldf > ch_amrlevelop_fact;
+  typedef                               FArrayBox       ch_fab_cell;
+  typedef                     LevelData< ch_fab_cell >  ch_ldf_cell;
+  typedef                       DisjointBoxLayout       ch_dbl;
+  typedef                           ProblemDomain       ch_dom;
+  typedef                           DataIterator        ch_dit;
+  typedef                                  MayDay       ch_mayday;
+  typedef                                     Box       ch_box;
+  typedef                       LevelFluxRegister       ch_flux_reg;
+  typedef     Base_Simplified_AMRLevelOp< ch_ldf_cell > ch_amrlevelop;
+  typedef                AMRFASMultiGrid< ch_ldf_cell > ch_amrfasmg;
+  typedef                      MGLevelOp< ch_ldf_cell > ch_mglevelop;
+  typedef                   LinearSolver< ch_ldf_cell > ch_linear_solver;
+  typedef                    RelaxSolver< ch_ldf_cell > ch_relax_solver;
+  typedef                 BiCGStabSolver< ch_ldf_cell > ch_bicgstab_solver;
+  typedef              AMRLevelOpFactory< ch_ldf_cell > ch_amrlevelop_fact;
 private:
 
 
@@ -785,18 +1058,18 @@ public:
   }
   
   /// full solve for non-isothermal ice
-  virtual int solve(Vector<ch_ldf* >& a_horizontalVel,
-                    Vector<ch_ldf* >& a_calvedIce, // not used
-                    Vector<ch_ldf* >& a_addedIce,  // not used
-                    Vector<ch_ldf* >& a_removedIce,//not used
+  virtual int solve(Vector<ch_ldf_cell* >& a_horizontalVel,
+                    Vector<ch_ldf_cell* >& a_calvedIce, // not used
+                    Vector<ch_ldf_cell* >& a_addedIce,  // not used
+                    Vector<ch_ldf_cell* >& a_removedIce,//not used
                     Real& a_initialResidualNorm, //poached from AMRFASMultiGrid
                     Real& a_finalResidualNorm,   //poached from AMRFASMultiGrid
                     const Real a_convergenceMetric,
-                    const Vector<ch_ldf* >& a_rhs,      
-                    const Vector<ch_ldf* >& a_C,
-                    const Vector<ch_ldf* >& a_C0,
-                    const Vector<ch_ldf* >& a_A,
-                    const Vector<ch_ldf* >& a_muCoef,
+                    const Vector<ch_ldf_cell* >& a_rhs,      
+                    const Vector<ch_ldf_cell* >& a_C,
+                    const Vector<ch_ldf_cell* >& a_C0,
+                    const Vector<ch_ldf_cell* >& a_A,
+                    const Vector<ch_ldf_cell* >& a_muCoef,
                     Vector<RefCountedPtr<LevelSigmaCS > >& a_coordSys,
                     Real a_time,
                     int a_lbase, int a_maxLevel)
