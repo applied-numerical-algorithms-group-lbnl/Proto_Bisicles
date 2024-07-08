@@ -98,6 +98,7 @@ private:
   ch_dbl                       m_dbl;
   ch_ldf_cell                  m_grad;
   Real                         m_dx;
+  LevelDataOps<FArrayBox>      m_levelOps;
 
       
 public:
@@ -571,7 +572,8 @@ public:
                              CHF_BOX(a_faceBox));
     }
   } //end function get flux from div and grad
-/// called by the coarser level
+
+  /// called by the coarser level
   virtual void
   refluxFineCorrection(ch_ldf_cell       &   a_lphCoar,
                        const ch_ldf_cell &   a_phiFine, 
@@ -609,8 +611,8 @@ public:
     Real alpha = alpha_coar; Real beta = beta_coar;
 
 
-    {
-      //coarse bit
+    {//coarse bit
+      CH_TIME("incrementCoarse");
       DataIterator dit = a_phiCoar.dataIterator();
       for (dit.reset(); dit.ok(); ++dit)
       {
@@ -631,9 +633,10 @@ public:
                                    interv,interv,idir);
         }
       }
-    }
-    {
-      //fine bit
+    }//end coarse bit
+    {//fine bit
+      
+      CH_TIME("incrementFine");
       DataIterator dit = a_phiFine.dataIterator();
       for (dit.reset(); dit.ok(); ++dit)
       {
@@ -654,29 +657,94 @@ public:
                                  interv,interv,idir);
         }
       }
+    } //end fine bit
+    {
+      ///and now for the big finish
+      CH_TIME("reflux");
+      Real scale =  beta/this->m_dx;
+      flux_reg.reflux(a_lphCoar, scale);
     }
-    Real scale =  beta/this->m_dx;
-    flux_reg.reflux(a_lphCoar, scale);
-
   }
-///For this one, the derived class may assume all ghost cells have been set correctly
+
+  ///For this one, the derived class may assume all ghost cells have been set correctly
   virtual void 
   applyOperator(ch_ldf_cell        & a_lph,
                 const ch_ldf_cell  & a_phi)
   {
     CH_TIME("CHF_ICE_VTO::applyOperator");
-    ch_mayday::Error("not implmented");
+    RefCountedPtr< ch_ldf_flux >  eta_ptr, lambda_ptr;
+    RefCountedPtr< ch_ldf_cell >        acoef_ptr;
+    Real                          alpha, beta;
+    ch_ldf_cell& phi_cast = (ch_ldf_cell &)(a_phi);
+    this->computeCoefficients( eta_ptr, lambda_ptr, acoef_ptr, alpha, beta, a_phi);
+
+    /**
+       already done 
+       fillGhostDataOutsideDomain(        phi_cast);
+       fillGhostDataOverFineFineInterface(phi_cast);
+    **/
+    fillGrad(a_phi);
+    const DisjointBoxLayout dbl= a_phi.getBoxes();
+    DataIterator dit = a_phi.dataIterator();
+    //this makes the lhs = alpha*phi
+    m_levelOps.setToZero(a_lhs);
+    incr(a_lph, a_phi, alpha);
+    int sdim_comp = SpaceDim;
+    for (dit.begin(); dit.ok(); ++dit)
+    {
+      for (int ivar = 0; ivar < SpaceDim; ivar++)
+      {
+        int src = 0; int dst = ivar; int one_comp = 1;
+        a_lph[dit()].mult((*acoef_ptr)[dit()],src,dst,one_comp);
+      }
+      Box gridBox = dbl.get(dit());
+      FluxBox flux(gridBox, SpaceDim);
+      FluxBox& eta    = (   *eta_ptr)[dit];
+      FluxBox& lambda = (*lambda_ptr)[dit];
+
+      //operator is alpha I + (divF) = alpha I + beta div(eta(grad B + grad B^T) + lambda I div B )
+      for (int idir = 0; idir < SpaceDim; idir++)
+      {
+        Box faceBox = surroundingNodes(gridBox, idir);
+        getFlux(flux[idir], a_phi[dit()], m_grad[dit()], eta[idir], lambda[idir],faceBox, idir);
+        FArrayBox& lhsFAB = a_lph[dit()];
+        const FArrayBox& fluxFAB = flux[idir];
+
+        //beta and eta are part of the flux.
+        FORT_ADDDIVFLUXDIRVTOP(CHF_FRA(lhsFAB),
+                               CHF_CONST_FRA(fluxFAB),
+                               CHF_BOX(gridBox),
+                               CHF_REAL(m_dx),
+                               CHF_CONST_INT(sdim_comp),
+                               CHF_CONST_INT(idir));
+      }
+    } // end loop over boxes
+
   }
 
 /// Restrict fine data to coarse data using volume-weighted averaging.   
   virtual void
   restriction(ch_ldf_cell & a_resCoar,
               ch_ldf_cell & a_resFine,
-              int ref_rat)
+              int a_ref_rat)
   {
     CH_TIME("CHF_ICE_VTO::restriction");
-    ch_mayday::Error("not implmented");
-  }
+    Box refbox(IntVect::Zero, (a_ref_rat-1)*IntVect::Unit);
+    DisjointBoxLayout  dbl_coar = a_resCoar.disjointBoxLayout();
+    DataIterator dit = db_coar.dataIterator();
+    for (dit.begin(); dit.ok(); ++dit)
+    {
+      FArrayBox&       res_coar = a_resCoar[dit()];
+      const FArrayBox& res_fine = a_resFine[dit()];
+      Box valid_coar            =  dbl_coar[dit()];
+      FORT_AVERAGE( CHF_FRA(coarse),
+                    CHF_CONST_FRA(fine),
+                    CHF_BOX(valid_coar),
+                    CHF_CONST_INT(a_ref_rat),
+                    CHF_BOX(refbox));
+    } 
+
+  }// end function restriction
 
 ///from LinearOp
   virtual void
@@ -684,7 +752,7 @@ public:
          const ch_ldf_cell& a_rhs)
   {
     CH_TIME("CHF_ICE_VTO::create");
-    ch_mayday::Error("not implmented");
+    m_levelOps.create(a_lhs, a_rhs);
   }
 
 ///from LinearOp
@@ -693,7 +761,7 @@ public:
          const ch_ldf_cell& a_rhs) 
   {
     CH_TIME("CHF_ICE_VTO::assign");
-    ch_mayday::Error("not implmented");
+    m_levelOps.assign(a_lhs, a_rhs);
   }
     
 ///from LinearOp
@@ -703,7 +771,7 @@ public:
   {
     CH_TIME("CHF_ICE_VTO::dotProduct");
     Real retval = 4586;
-    ch_mayday::Error("not implmented");
+    retval = m_levelOps.dotProduct(a_1, a_2);
     return retval;
   }
 
@@ -717,7 +785,7 @@ public:
        Real          a_b)
   {
     CH_TIME("CHF_ICE_VTO::axby");
-    ch_mayday::Error("not implmented");
+    m_levelOps.axby(a_lhs, a_x, a_y, a_a, a_b);
   }
 
 ///from LinearOp
@@ -726,7 +794,8 @@ public:
   {
     CH_TIME("CHF_ICE_VTO::norm");
     Real retval = 4586;
-    ch_mayday::Error("not implmented");
+    retval = CH_XD::norm(a_rhs, a_rhs.interval(), a_ord);
+
     return retval;
   }
     
@@ -735,7 +804,7 @@ public:
   setToZero(ch_ldf_cell & a_lhs)
   {
     CH_TIME("CHF_ICE_VTO::setToZero");
-    ch_mayday::Error("not implmented");
+    m_levelOps.setToZero(a_lhs);
   }
 
 ///from MGLevelOp
@@ -745,17 +814,111 @@ public:
                 bool ghosted)
   {
     CH_TIME("CHF_ICE_VTO::createCoarser");
-    ch_mayday::Error("not implmented");
+
+    IntVect ghost = a_fine.ghostVect();
+    DisjointBoxLayout dbl;
+    CH_assert(dbl.coarsenable(2));
+    coarsen(dbl, a_fine.disjointBoxLayout(), 2); //multigrid, so coarsen by 2
+    a_coarse.define(dbl, a_fine.nComp(), ghost);
   }
     
 ///from MGLevelOp
   virtual void
-  relax(ch_ldf_cell      & a_correction,
-        const ch_ldf_cell& a_residual,
+  relax(ch_ldf_cell      & a_phi,
+        const ch_ldf_cell& a_rhs,
         int a_iterations)
   {
     CH_TIME("CHF_ICE_VTO::relax");
-    ch_mayday::Error("not implmented");
+    RefCountedPtr< ch_ldf_flux >  eta_ptr, lambda_ptr;
+    RefCountedPtr< ch_ldf_cell >        acoef_ptr;
+    Real                          alpha, beta;
+    ch_ldf_cell& phi_cast = (ch_ldf_cell &)(a_phi);
+    this->computeCoefficients( eta_ptr, lambda_ptr, acoef_ptr, alpha, beta, a_phi);
+
+#define HUGE_NORM 1.0e+20
+#define TINY_NORM 1.0e-20
+    LevelData<FArrayBox> lphi;
+    m_levelOps.create(lphi, a_rhs);
+    LevelData<FArrayBox> prevPhi;
+    
+    m_levelOps.create(prevPhi, a_rhs);
+
+    // do first red, then black passes
+    const DisjointBoxLayout& dbl = a_phi.disjointBoxLayout();
+    int whichIter = 0;
+    bool done = false;
+
+
+  
+    for(int iiter = 0; iiter < a_iterations; iiter++)
+    {
+      /**
+         HERE I should write a CFInterp thingy (need another ghost cell category even for homogeneous stuff).
+      **/
+      // this calls exchange whether or not there is a coarse level
+      homogeneousCFInterp(a_phi);
+
+      
+      // Loop over all possibilities (in all dimensions)
+      for (int icolor = 0; icolor < m_colors.size(); icolor++)
+        {
+          const IntVect& color= m_colors[icolor];
+
+          // "lazy" = call once/iteration. "not lazy" = call every color
+          if (!s_lazy_gsrb)
+            {
+              // this calls exchange whether or not there is a coarse level
+              homogeneousCFInterp(a_phi);
+            }
+          
+          //after this lphi = L(phi)
+          //this call contains bcs but no exchange
+          applyOpNoExchange(lphi, a_phi, true);
+
+          for (DataIterator dit = dbl.dataIterator(); dit.ok(); ++dit)
+            {
+              Box dblBox  = dbl.get(dit());
+
+              IntVect loIV = dblBox.smallEnd();
+              IntVect hiIV = dblBox.bigEnd();
+
+              for (int idir = 0; idir < SpaceDim; idir++)
+                {
+                  if (abs(loIV[idir]) % 2 != color[idir])
+                    {
+                      loIV[idir]++;
+                    }
+                }
+
+              if (loIV <= hiIV)
+                {
+                  Box coloredBox(loIV, hiIV);
+                  FORT_GSRBVTOP(CHF_FRA(a_phi[dit]),
+                                CHF_CONST_FRA( lphi[dit]),
+                                CHF_CONST_FRA(a_rhs[dit]),
+                                CHF_CONST_FRA(m_relaxCoef[dit]),
+                                CHF_BOX(coloredBox),
+                                CHF_CONST_INT(m_ncomp));
+                }
+            }
+        } // end loop through red-black
+
+      //slc : if we have done at least some smooths, give up if they
+      //      are no longer changing the solution much. This is not
+      //      fatal : it usually leads to multigrid happiness.
+
+      if (whichIter > m_relaxMinIter && m_relaxTolerance >  TINY_NORM)
+      {
+        Real maxPhi =  norm(a_phi,0);
+        CH_assert(maxPhi < HUGE_NORM);
+        incr(prevPhi,a_phi,-1.0);
+        Real maxDPhi = norm(prevPhi, 0);
+        CH_assert(maxDPhi < HUGE_NORM);
+        done = maxDPhi < m_relaxTolerance * (maxPhi + TINY_NORM);
+      }
+      whichIter++;
+    }
+
   }
 
   virtual int refToCoarser()
