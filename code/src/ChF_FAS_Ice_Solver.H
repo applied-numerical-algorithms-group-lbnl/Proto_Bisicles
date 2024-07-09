@@ -18,6 +18,8 @@
 ///from Chombo/lib/src/AMRElliptic
 #include "TensorCFInterp.H"
 #include "ViscousTensorOpF_F.H"
+#include "AverageF_F.H"
+#include "InterpF_F.H"
 #include <memory>  //good title for a book
 #include "NamespaceHeader.H"
 
@@ -60,17 +62,17 @@ private:
   {
     m_dom = m_coarseDomain;
     m_dx = m_dxCrse[0];
-    for(int ilev = 0; ilev < m_startLevel; ilev++)
+    for(int ilev = 0; ilev < m_start_level; ilev++)
     {
-      m_dom.refine(m_refRat[ilev]);
-      m_dx /= m_refRat[ilev];
+      m_dom.refine(m_ref_rat[ilev]);
+      m_dx /= m_ref_rat[ilev];
     }
-    m_dbl = m_grids[m_startLevel];
-    if(m_refRatioToAMR  > 1)
+    m_dbl = m_grids[m_start_level];
+    if(m_ref_ratioToAMR  > 1)
     {
-      m_dom.coarsen(m_refRatioToAMR);
-      m_dbl.coarsen(m_refRatioToAMR);
-      m_dx *= m_refRatioToAMR;
+      m_dom.coarsen(m_ref_ratioToAMR);
+      m_dbl.coarsen(m_ref_ratioToAMR);
+      m_dx *= m_ref_ratioToAMR;
     }
 
     m_grad.define(m_dbl, SpaceDim*SpaceDim, IntVect::Unit);
@@ -84,12 +86,12 @@ private:
   ConstitutiveRelation*        m_constRel           ;
   BasalFrictionRelation*       m_basalFrictionRel   ;
   Vector<DisjointBoxLayout>    m_grids              ;
-  Vector<int>                  m_refRat             ;
+  Vector<int>                  m_ref_rat             ;
   RealVect                     m_dxCrse             ;
   IceThicknessIBC*             m_bc                 ;
   int                          m_numLevels          ;
-  int                          m_startLevel         ;
-  int                          m_refRatioToAMR      ;
+  int                          m_start_level         ;
+  int                          m_ref_ratioToAMR      ;
   ///this is the local member data (defined at construction)
   /**
      I am trying to keep this at a minimum but more may creep in here for performance reasons.
@@ -112,6 +114,7 @@ public:
   void  computeCoefficients( RefCountedPtr< ch_ldf_flux >       &      a_eta,
                              RefCountedPtr< ch_ldf_flux >       &      a_lambda,
                              RefCountedPtr< ch_ldf_cell >       &      a_acoef,
+                             RefCountedPtr< ch_ldf_cell >       &      a_relco,
                              Real                               &      a_alpha,
                              Real                               &      a_beta,
                              const ch_ldf_cell                  &      a_phi)
@@ -126,24 +129,24 @@ public:
                             ConstitutiveRelation           *  a_constRel           ,
                             BasalFrictionRelation          *  a_basalFrictionRel   ,
                             const Vector<DisjointBoxLayout>&  a_grids          ,
-                            const Vector<int>              &  a_refRat       ,
+                            const Vector<int>              &  a_ref_rat       ,
                             const RealVect                 &  a_dxCrse             ,
                             IceThicknessIBC                *  a_bc                 ,
                             int                               a_numLevels          ,
-                            int                               a_startLevel         ,
-                            int                               a_refRatioToAMR      )
+                            int                               a_start_level         ,
+                            int                               a_ref_ratioToAMR      )
   {
 
     m_coarseDomain       = a_coarseDomain     ;
     m_constRel           = a_constRel         ;
     m_basalFrictionRel   = a_basalFrictionRel ;
     m_grids              = a_grids            ;
-    m_refRat             = a_refRat           ;
+    m_ref_rat             = a_ref_rat           ;
     m_dxCrse             = a_dxCrse           ;
     m_bc                 = a_bc               ;
     m_numLevels          = a_numLevels        ;
-    m_startLevel         = a_startLevel       ;
-    m_refRatioToAMR      = a_refRatioToAMR    ;
+    m_start_level         = a_start_level       ;
+    m_ref_ratioToAMR      = a_ref_ratioToAMR    ;
     defineLocalData();
   }
 
@@ -300,25 +303,34 @@ public:
   }
     
 
-  ///mostly poached from lib/src/AMRElliptic/ViscousTensorOp.cpp
+  ///if phi_coar == NULL, zeros on coarse-fine interface
   virtual void
-  fillGhostDataOverCoarseFineInterface(ch_ldf_cell       &  a_phiFine, 
-                                       const ch_ldf_cell &  a_phiCoar)
+  fillGhostDataOverCoarseFineInterface(ch_ldf_cell       &  a_phi_fine, 
+                                       const ch_ldf_cell *  a_phi_coar_ptr)
   {
     CH_TIME("CHF_ICE_VTO::fillGhostDataOverCoarsefineInterface");
-    Real    dx_fine = m_dx;
-    Box     do_fine = m_dom.domainBox();
-    int  refToCoar = m_refRat[m_startLevel-1];
-    setToZero(m_grad);
-    int ncomp = SpaceDim;
-    DisjointBoxLayout grids_fine = a_phiFine.disjointBoxLayout();
-    DisjointBoxLayout grids_coar = a_phiCoar.disjointBoxLayout();
-    TensorCFInterp interpWithCoarser;
-    interpWithCoarser.define(grids_fine, &grids_coar,
-                             dx_fine, refToCoar, ncomp,
-                             do_fine);
-    interpWithCoarser.coarseFineInterp(a_phiFine, m_grad, a_phiCoar);
-      
+    if(m_start_level > 0)
+    {
+      Real    dx_fine = m_dx;
+      Box     do_fine = m_dom.domainBox();
+      int  refToCoar = m_ref_rat[m_start_level-1];
+      setToZero(m_grad);
+      int ncomp = SpaceDim;
+      DisjointBoxLayout  grids_fine     = a_phi_fine.disjointBoxLayout();
+      DisjointBoxLayout* grids_coar_ptr = &m_grids[m_start_level-1];
+      TensorCFInterp    interp_with_coarser;  //_
+      interp_with_coarser.define(grids_fine, grids_coar_ptr,
+                                 dx_fine, refToCoar, ncomp,
+                                 do_fine);
+      if(a_phi_coar_ptr != NULL)
+      {
+        interp_with_coarser.coarseFineInterp(a_phi_fine, m_grad, *a_phi_coar_ptr);
+      }
+      else
+      {
+        interp_with_coarser.coarseFineInterpH(a_phi_fine, m_grad);
+      }
+    }//end if(we are on amrlevel > 0
   }
 
   ///mostly poached from lib/src/AMRElliptic/ViscousTensorOp.cpp
@@ -575,37 +587,38 @@ public:
 
   /// called by the coarser level
   virtual void
-  refluxFineCorrection(ch_ldf_cell       &   a_lphCoar,
-                       const ch_ldf_cell &   a_phiFine, 
-                       const ch_ldf_cell &   a_phiCoar,
+  refluxFineCorrection(ch_ldf_cell       &   a_lph_coar,
+                       const ch_ldf_cell &   a_phi_fine, 
+                       const ch_ldf_cell &   a_phi_coar,
                        AMRLevelOp<ch_ldf_cell>*   a_finerBase)
   {
     CH_TIME("CHF_ICE_VTO::refluxFineCorrection");
     Interval interv(0, SpaceDim-1);
-    int refToFine = m_refRat[m_startLevel];
-    ch_dbl dbl_fine = a_phiFine.disjointBoxLayout();
-    ch_dbl dbl_coar = a_phiCoar.disjointBoxLayout();
+    int ref_to_fine = m_ref_rat[m_start_level];
+    ch_dbl dbl_fine = a_phi_fine.disjointBoxLayout();
+    ch_dbl dbl_coar = a_phi_coar.disjointBoxLayout();
     ChF_Ice_Viscous_Tensor_Op*
       op_f = dynamic_cast<ChF_Ice_Viscous_Tensor_Op*>(a_finerBase);
     /**
        VTO skips this step (because of context, I guess).
        Ergo, the next two lines  may be unnecessary.
     **/
-    this->fillGrad(a_phiCoar);
-    ch_ldf_cell& phi_fine_cast = (ch_ldf_cell&)a_phiFine;
-    op_f->fillGhostDataOverCoarseFineInterface(phi_fine_cast, a_phiCoar);
-    op_f->fillGrad(a_phiFine);
-    ch_dom dom_fine = refine(m_dom, refToFine);
+    this->fillGrad(a_phi_coar);
+    ch_ldf_cell& phi_fine_cast = (ch_ldf_cell&)a_phi_fine;
+    op_f->fillGhostDataOverCoarseFineInterface(phi_fine_cast, &a_phi_coar);
+    op_f->fillGrad(a_phi_fine);
+    ch_dom dom_fine = refine(m_dom, ref_to_fine);
       
-    ch_flux_reg flux_reg(dbl_fine, dbl_coar, dom_fine, refToFine, SpaceDim);
+    ch_flux_reg flux_reg(dbl_fine, dbl_coar, dom_fine, ref_to_fine, SpaceDim);
     flux_reg.setToZero();
     RefCountedPtr< ch_ldf_flux >          eta_fine,   eta_coar;
     RefCountedPtr< ch_ldf_flux >       lambda_fine,lambda_coar;
     RefCountedPtr< ch_ldf_cell >        acoef_fine, acoef_coar;
+    RefCountedPtr< ch_ldf_cell >        relco_fine, relco_coar;
     Real                                alpha_fine, alpha_coar;
     Real                                 beta_fine,  beta_coar;
-    this->computeCoefficients( eta_coar, lambda_coar, acoef_coar, alpha_coar, beta_coar, a_phiCoar);
-    op_f->computeCoefficients( eta_fine, lambda_fine, acoef_fine, alpha_fine, beta_fine, a_phiFine);
+    this->computeCoefficients( eta_coar, lambda_coar, acoef_coar, relco_coar, alpha_coar, beta_coar, a_phi_coar);
+    op_f->computeCoefficients( eta_fine, lambda_fine, acoef_fine, relco_fine, alpha_fine, beta_fine, a_phi_fine);
     CH_assert(std::abs(alpha_coar - alpha_fine) < 1.0e-10);
     CH_assert(std::abs( beta_coar -  beta_fine) < 1.0e-10);
     Real alpha = alpha_coar; Real beta = beta_coar;
@@ -613,13 +626,13 @@ public:
 
     {//coarse bit
       CH_TIME("incrementCoarse");
-      DataIterator dit = a_phiCoar.dataIterator();
+      DataIterator dit = a_phi_coar.dataIterator();
       for (dit.reset(); dit.ok(); ++dit)
       {
-        const FArrayBox& coarfab    =    a_phiCoar[dit];
+        const FArrayBox& coarfab    =    a_phi_coar[dit];
         const FluxBox&   coareta    =    (*eta_coar)[dit];
         const FluxBox&   coarlambda = (*lambda_coar)[dit];
-        const Box&       gridBox    =   a_phiCoar.getBoxes()[dit];
+        const Box&       gridBox    =   a_phi_coar.getBoxes()[dit];
 
         for (int idir = 0; idir < SpaceDim; idir++)
         {
@@ -637,13 +650,13 @@ public:
     {//fine bit
       
       CH_TIME("incrementFine");
-      DataIterator dit = a_phiFine.dataIterator();
+      DataIterator dit = a_phi_fine.dataIterator();
       for (dit.reset(); dit.ok(); ++dit)
       {
-        const FArrayBox& finefab    =    a_phiFine[dit];
+        const FArrayBox& finefab    =    a_phi_fine[dit];
         const FluxBox&   fineeta    =    (*eta_fine)[dit];
         const FluxBox&   finelambda = (*lambda_fine)[dit];
-        const Box&       gridBox    =   a_phiFine.getBoxes()[dit];
+        const Box&       gridBox    =   a_phi_fine.getBoxes()[dit];
 
         for (int idir = 0; idir < SpaceDim; idir++)
         {
@@ -662,7 +675,7 @@ public:
       ///and now for the big finish
       CH_TIME("reflux");
       Real scale =  beta/this->m_dx;
-      flux_reg.reflux(a_lphCoar, scale);
+      flux_reg.reflux(a_lph_coar, scale);
     }
   }
 
@@ -672,11 +685,11 @@ public:
                 const ch_ldf_cell  & a_phi)
   {
     CH_TIME("CHF_ICE_VTO::applyOperator");
-    RefCountedPtr< ch_ldf_flux >  eta_ptr, lambda_ptr;
-    RefCountedPtr< ch_ldf_cell >        acoef_ptr;
+    RefCountedPtr< ch_ldf_flux >     eta_ptr, lambda_ptr;
+    RefCountedPtr< ch_ldf_cell >   acoef_ptr,  relco_ptr;
     Real                          alpha, beta;
     ch_ldf_cell& phi_cast = (ch_ldf_cell &)(a_phi);
-    this->computeCoefficients( eta_ptr, lambda_ptr, acoef_ptr, alpha, beta, a_phi);
+    this->computeCoefficients( eta_ptr, lambda_ptr, acoef_ptr, relco_ptr, alpha, beta, a_phi);
 
     /**
        already done 
@@ -687,7 +700,7 @@ public:
     const DisjointBoxLayout dbl= a_phi.getBoxes();
     DataIterator dit = a_phi.dataIterator();
     //this makes the lhs = alpha*phi
-    m_levelOps.setToZero(a_lhs);
+    m_levelOps.setToZero(a_lph);
     incr(a_lph, a_phi, alpha);
     int sdim_comp = SpaceDim;
     for (dit.begin(); dit.ok(); ++dit)
@@ -706,7 +719,7 @@ public:
       for (int idir = 0; idir < SpaceDim; idir++)
       {
         Box faceBox = surroundingNodes(gridBox, idir);
-        getFlux(flux[idir], a_phi[dit()], m_grad[dit()], eta[idir], lambda[idir],faceBox, idir);
+        getFlux(flux[idir], a_phi[dit()], m_grad[dit()], eta[idir], lambda[idir],faceBox, idir, beta);
         FArrayBox& lhsFAB = a_lph[dit()];
         const FArrayBox& fluxFAB = flux[idir];
 
@@ -729,19 +742,19 @@ public:
               int a_ref_rat)
   {
     CH_TIME("CHF_ICE_VTO::restriction");
-    Box refbox(IntVect::Zero, (a_ref_rat-1)*IntVect::Unit);
+    Box ref_box(IntVect::Zero, (a_ref_rat-1)*IntVect::Unit); //_
     DisjointBoxLayout  dbl_coar = a_resCoar.disjointBoxLayout();
-    DataIterator dit = db_coar.dataIterator();
+    DataIterator dit = dbl_coar.dataIterator();
     for (dit.begin(); dit.ok(); ++dit)
     {
       FArrayBox&       res_coar = a_resCoar[dit()];
       const FArrayBox& res_fine = a_resFine[dit()];
       Box valid_coar            =  dbl_coar[dit()];
-      FORT_AVERAGE( CHF_FRA(coarse),
-                    CHF_CONST_FRA(fine),
-                    CHF_BOX(valid_coar),
+      FORT_AVERAGE( CHF_FRA(        res_coar),
+                    CHF_CONST_FRA(  res_fine),
+                    CHF_BOX(      valid_coar),
                     CHF_CONST_INT(a_ref_rat),
-                    CHF_BOX(refbox));
+                    CHF_BOX(        ref_box));
     } 
 
   }// end function restriction
@@ -822,6 +835,32 @@ public:
     a_coarse.define(dbl, a_fine.nComp(), ghost);
   }
     
+  void
+  getMultiColors(Vector<IntVect>& a_colors) const
+  {
+
+#if CH_SPACEDIM==1
+    a_colors.resize(2);
+    a_colors[0] = IntVect::Zero;//(0,0)
+    a_colors[1] = IntVect::Unit;//(1,1)
+#elif CH_SPACEDIM==2
+    a_colors.resize(4);
+    a_colors[0] = IntVect::Zero;//(0,0)
+    a_colors[1] = IntVect::Unit;//(1,1)
+    a_colors[2] = IntVect::Zero + BASISV(1);//(0,1)
+    a_colors[3] = IntVect::Zero + BASISV(0);//(1,0)
+#elif CH_SPACEDIM==3
+    a_colors.resize(8);
+    a_colors[0] = IntVect::Zero;//(0,0,0)
+    a_colors[1] = IntVect::Zero + BASISV(0) + BASISV(1);//(1,1,0)
+    a_colors[2] = IntVect::Zero + BASISV(1) + BASISV(2);//(0,1,1)
+    a_colors[3] = IntVect::Zero + BASISV(0) + BASISV(2);//(1,0,1)
+    a_colors[4] = IntVect::Zero + BASISV(1);//(0,1,0)
+    a_colors[5] = IntVect::Zero + BASISV(0);//(1,0,0)
+    a_colors[6] = IntVect::Zero + BASISV(2);//(0,0,1)
+    a_colors[7] = IntVect::Unit;//(1,1,1)
+#endif
+  }
 ///from MGLevelOp
   virtual void
   relax(ch_ldf_cell      & a_phi,
@@ -829,18 +868,16 @@ public:
         int a_iterations)
   {
     CH_TIME("CHF_ICE_VTO::relax");
-    RefCountedPtr< ch_ldf_flux >  eta_ptr, lambda_ptr;
-    RefCountedPtr< ch_ldf_cell >        acoef_ptr;
+    RefCountedPtr< ch_ldf_flux >    eta_ptr, lambda_ptr;
+    RefCountedPtr< ch_ldf_cell >  acoef_ptr, relco_ptr;
     Real                          alpha, beta;
     ch_ldf_cell& phi_cast = (ch_ldf_cell &)(a_phi);
-    this->computeCoefficients( eta_ptr, lambda_ptr, acoef_ptr, alpha, beta, a_phi);
+    this->computeCoefficients( eta_ptr, lambda_ptr, acoef_ptr, relco_ptr, alpha, beta, a_phi);
 
-#define HUGE_NORM 1.0e+20
-#define TINY_NORM 1.0e-20
     LevelData<FArrayBox> lphi;
     m_levelOps.create(lphi, a_rhs);
     LevelData<FArrayBox> prevPhi;
-    
+    int var_comp = SpaceDim;
     m_levelOps.create(prevPhi, a_rhs);
 
     // do first red, then black passes
@@ -848,83 +885,64 @@ public:
     int whichIter = 0;
     bool done = false;
 
-
-  
+    Vector<IntVect> relax_colors;
+    getMultiColors(relax_colors);
     for(int iiter = 0; iiter < a_iterations; iiter++)
     {
-      /**
-         HERE I should write a CFInterp thingy (need another ghost cell category even for homogeneous stuff).
-      **/
-      // this calls exchange whether or not there is a coarse level
-      homogeneousCFInterp(a_phi);
-
-      
-      // Loop over all possibilities (in all dimensions)
-      for (int icolor = 0; icolor < m_colors.size(); icolor++)
-        {
-          const IntVect& color= m_colors[icolor];
-
-          // "lazy" = call once/iteration. "not lazy" = call every color
-          if (!s_lazy_gsrb)
-            {
-              // this calls exchange whether or not there is a coarse level
-              homogeneousCFInterp(a_phi);
-            }
-          
-          //after this lphi = L(phi)
-          //this call contains bcs but no exchange
-          applyOpNoExchange(lphi, a_phi, true);
-
-          for (DataIterator dit = dbl.dataIterator(); dit.ok(); ++dit)
-            {
-              Box dblBox  = dbl.get(dit());
-
-              IntVect loIV = dblBox.smallEnd();
-              IntVect hiIV = dblBox.bigEnd();
-
-              for (int idir = 0; idir < SpaceDim; idir++)
-                {
-                  if (abs(loIV[idir]) % 2 != color[idir])
-                    {
-                      loIV[idir]++;
-                    }
-                }
-
-              if (loIV <= hiIV)
-                {
-                  Box coloredBox(loIV, hiIV);
-                  FORT_GSRBVTOP(CHF_FRA(a_phi[dit]),
-                                CHF_CONST_FRA( lphi[dit]),
-                                CHF_CONST_FRA(a_rhs[dit]),
-                                CHF_CONST_FRA(m_relaxCoef[dit]),
-                                CHF_BOX(coloredBox),
-                                CHF_CONST_INT(m_ncomp));
-                }
-            }
-        } // end loop through red-black
-
-      //slc : if we have done at least some smooths, give up if they
-      //      are no longer changing the solution much. This is not
-      //      fatal : it usually leads to multigrid happiness.
-
-      if (whichIter > m_relaxMinIter && m_relaxTolerance >  TINY_NORM)
+      for (int icolor = 0; icolor < relax_colors.size(); icolor++)
       {
-        Real maxPhi =  norm(a_phi,0);
-        CH_assert(maxPhi < HUGE_NORM);
-        incr(prevPhi,a_phi,-1.0);
-        Real maxDPhi = norm(prevPhi, 0);
-        CH_assert(maxDPhi < HUGE_NORM);
-        done = maxDPhi < m_relaxTolerance * (maxPhi + TINY_NORM);
-      }
-      whichIter++;
-    }
+        fillGhostData(a_phi, NULL);
+        const IntVect& color= relax_colors[icolor];
+        //after this lphi = L(phi)
+        applyOperator(lphi, a_phi);
 
-  }
+        for (DataIterator dit = dbl.dataIterator(); dit.ok(); ++dit)
+        {
+          Box dblBox  = dbl.get(dit());
 
+          IntVect loIV = dblBox.smallEnd();
+          IntVect hiIV = dblBox.bigEnd();
+
+          for (int idir = 0; idir < SpaceDim; idir++)
+          {
+            if (abs(loIV[idir]) % 2 != color[idir])
+            {
+              loIV[idir]++;
+            }
+          }
+
+          if (loIV <= hiIV)
+          {
+            ch_fab_cell       & phi_fab =        a_phi[dit];
+            const ch_fab_cell & lph_fab =         lphi[dit];
+            const ch_fab_cell & rhs_fab =        a_rhs[dit];
+            const ch_fab_cell & lam_fab = (*relco_ptr)[dit];
+            Box colored_box(loIV, hiIV);
+            FORT_GSRBVTOP(CHF_FRA(      phi_fab),
+                          CHF_CONST_FRA(lph_fab),
+                          CHF_CONST_FRA(rhs_fab),
+                          CHF_CONST_FRA(lam_fab),
+                          CHF_BOX(colored_box),
+                          CHF_CONST_INT(var_comp));
+          } // end weird loiv/hiiv check
+        }   // end loop over grids
+      }     // end loop through red-black
+    }       // end loop over iterations
+  }         // end function relax
+
+  ///
   virtual int refToCoarser()
   {
     int retval = 4586;
-    ch_mayday::Error("not implmented");
+    if(m_start_level > 0)
+    {
+      retval = m_ref_rat[m_start_level-1];
+    }
+    else
+    {
+      ch_mayday::Error("chf_fas::confusion: refToCoarser called when there is no coarser");
+    }
+
     return retval;
   }
     
@@ -965,7 +983,7 @@ public:
  */
   virtual void createCoarsened(ch_ldf_cell&       a_lhs,
                                const ch_ldf_cell& a_rhs,
-                               const int&     a_refRat)
+                               const int&     a_ref_rat)
   {
     CH_TIME("CHF_ICE_VTO::createCoarsened");
     ch_mayday::Error("not implmented");
@@ -1003,7 +1021,7 @@ public:
   ConstitutiveRelation*      m_constRel           ;
   BasalFrictionRelation*     m_basalFrictionRel   ;
   Vector<DisjointBoxLayout>  m_grids          ;
-  Vector<int>                m_refRat       ;
+  Vector<int>                m_ref_rat       ;
   RealVect                   m_dxCrse             ;
   IceThicknessIBC*           m_bc                 ;
   int                        m_numLevels          ;
@@ -1014,7 +1032,7 @@ public:
                       ConstitutiveRelation*             a_constRel           ,
                       BasalFrictionRelation*            a_basalFrictionRel   ,
                       const Vector<DisjointBoxLayout>&  a_vectGrids          ,
-                      const Vector<int>&                a_refRat       ,
+                      const Vector<int>&                a_ref_rat       ,
                       const RealVect&                   a_dxCrse             ,
                       IceThicknessIBC*                  a_bc                 ,
                       int                               a_numLevels          )
@@ -1023,7 +1041,7 @@ public:
     m_constRel           =  a_constRel        ;
     m_basalFrictionRel   =  a_basalFrictionRel;
     m_grids          =  a_vectGrids       ;
-    m_refRat       =  a_refRat    ;
+    m_ref_rat       =  a_ref_rat    ;
     m_dxCrse             =  a_dxCrse          ;
     m_bc                 =  a_bc              ;
     m_numLevels          =  a_numLevels       ;
@@ -1039,10 +1057,10 @@ public:
       if(dom_lev == a_indexSpace)
       {
         found = true;
-        retval = m_refRat[ilev];
+        retval = m_ref_rat[ilev];
       }
       ///Chombo changes in place here
-      dom_lev.refine(m_refRat[ilev]);
+      dom_lev.refine(m_ref_rat[ilev]);
     }
     if(!found)
     {
@@ -1059,14 +1077,14 @@ public:
   /// 
   virtual ch_amrlevelop* AMRnewOp(const ch_dom& a_indexSpace)
   {
-    int startLevel = 4586;
+    int start_level = 4586;
     bool found = false;
     ch_dom dom_lev = m_coarseDomain;
     for(int ilev = 0; ilev < m_numLevels; ilev++)
     {
       if(a_indexSpace == dom_lev)
       {
-        startLevel = ilev;
+        start_level = ilev;
         found = true;
       }
           
@@ -1081,11 +1099,11 @@ public:
                           m_constRel        ,
                           m_basalFrictionRel,
                           m_grids           ,
-                          m_refRat          ,
+                          m_ref_rat          ,
                           m_dxCrse          ,
                           m_bc              ,
                           m_numLevels       ,
-                          startLevel        ,
+                          start_level        ,
                           refRatioToAMR     );
       retval = static_cast<ch_amrlevelop*>(ice_op_ptr);
     }
@@ -1097,24 +1115,24 @@ public:
                                 int             a_depth,
                                 bool            a_homoOnly = true)
   {
-    int startLevel = 4586;
+    int start_level = 4586;
     bool found = false;
     ch_dom dom_lev = m_coarseDomain;
     for(int ilev = 0; ilev < m_numLevels; ilev++)
     {
       if(a_indexSpace == dom_lev)
       {
-        startLevel = ilev;
+        start_level = ilev;
         found = true;
       }
-      dom_lev.refine(m_refRat[ilev]);
+      dom_lev.refine(m_ref_rat[ilev]);
           
     }
     bool coarsenable = false;
     int refRatioToAMR = 4586;
     if(found)
     {
-      const ch_dbl & startGrids = m_grids[startLevel];
+      const ch_dbl & startGrids = m_grids[start_level];
       int mg_ref_ratio = 1;  
       for(int img = 0; img < a_depth; img++)
       {
@@ -1133,11 +1151,11 @@ public:
                           m_constRel           ,
                           m_basalFrictionRel   ,
                           m_grids          ,
-                          m_refRat       ,
+                          m_ref_rat       ,
                           m_dxCrse             ,
                           m_bc                 ,
                           m_numLevels          ,
-                          startLevel,  refRatioToAMR);
+                          start_level,  refRatioToAMR);
       retval = static_cast<ch_amrlevelop*>(ice_op_ptr);
     }
     return retval;
@@ -1189,7 +1207,7 @@ public:
   ConstitutiveRelation*      m_constRel           ;
   BasalFrictionRelation*     m_basalFrictionRel   ;
   Vector<DisjointBoxLayout>  m_grids              ;
-  Vector<int>                m_refRat             ;
+  Vector<int>                m_ref_rat             ;
   RealVect                   m_dxCrse             ;
   IceThicknessIBC*           m_bc                 ;
   int                        m_numLevels          ;
@@ -1200,7 +1218,7 @@ public:
                      ConstitutiveRelation*             a_constRel        ,
                      BasalFrictionRelation*            a_basalFrictionRel,
                      const Vector<DisjointBoxLayout>&  a_grids           ,
-                     const Vector<int>&                a_refRat          ,
+                     const Vector<int>&                a_ref_rat          ,
                      const RealVect&                   a_dxCrse          ,
                      IceThicknessIBC*                  a_bc              ,
                      int                               a_numLevels       )
@@ -1210,7 +1228,7 @@ public:
     m_constRel           =  a_constRel        ;
     m_basalFrictionRel   =  a_basalFrictionRel;
     m_grids              =  a_grids       ;
-    m_refRat             =  a_refRat    ;
+    m_ref_rat             =  a_ref_rat    ;
     m_dxCrse             =  a_dxCrse          ;
     m_bc                 =  a_bc              ;
     m_numLevels          =  a_numLevels       ;
@@ -1241,7 +1259,7 @@ public:
                               m_constRel           ,
                               m_basalFrictionRel   ,
                               m_grids              ,
-                              m_refRat             ,
+                              m_ref_rat            ,
                               m_dxCrse             ,
                               m_bc                 ,
                               m_numLevels          );
@@ -1270,7 +1288,7 @@ public:
                       ConstitutiveRelation* a_constRel,
                       BasalFrictionRelation* a_FrictionRel,
                       const Vector<DisjointBoxLayout>& a_vectGrids,
-                      const Vector<int>& a_refRat,
+                      const Vector<int>& a_ref_rat,
                       const RealVect& a_dxCrse,
                       IceThicknessIBC* a_bc,
                       int a_numLevels)
