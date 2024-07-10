@@ -945,26 +945,76 @@ public:
 
     return retval;
   }
-    
+  
+  ///borrowed from VTO
   virtual void
-  AMRRestrict(ch_ldf_cell      & a_resCoarse,
-              const ch_ldf_cell& a_residual,
-              const ch_ldf_cell& a_correction,
-              const ch_ldf_cell& a_coarseCorrection,
+  AMRRestrict(ch_ldf_cell      & a_res_coar,
+              const ch_ldf_cell& a_res_fine,
+              const ch_ldf_cell& a_cor_fine,
+              const ch_ldf_cell& a_cor_coar,
               bool a_skip_res)
   {
     CH_TIME("CHF_ICE_VTO::AMRRestrict");
-    ch_mayday::Error("not implmented");
+
+    ch_ldf        resid_fine;
+    create(       resid_fine, a_residual);
+    ///a_resid_fine used as RHS here
+    AMRResidualNF(resid_fine, a_correction, a_coarseCorrection, a_res_fine, true);
+    ch_dbl  dbl_coar = a_res_coar.disjointBoxLayout();
+    DataIterator dat_iter = a_res_fine.dataIterator();
+    ///Think of ref_box as the box within the cell.  
+    int  ref_to_coar = m_ref_rat[m_start_level-1];
+    Box ref_box(IntVect::Zero, (m_refToCoar-1)*IntVect::Unit);
+    for (int ibox = 0; ibox < dat_iter.size(); ibox++)
+    {
+      auto dit = dat_iter[ibox];
+      ch_fab       & res_fab_coar = a_res_coar[dit];
+      const ch_fab & res_fab_fine = resid_fine[dit];
+      const Box    & valid        =    dblCoar[dit];
+      FORT_AVERAGE( CHF_FRA(      res_fab_coar),
+                    CHF_CONST_FRA(res_fab_fine),
+                    CHF_BOX(valid),
+                    CHF_CONST_INT(ref_to_coar),
+                    CHF_BOX(ref_box) );
+    }
+
   }
 
-///
-/** a_correction += I[2h->h](a_coarseCorrection) */
+  ///borrowed from VTO
+  /** a_correction += I[2h->h](a_coarseCorrection) */
   virtual void
-  AMRProlong(ch_ldf_cell      & a_correction,
-             const ch_ldf_cell& a_coarseCorrection)
+  AMRProlong(ch_ldf_cell      & a_corr_fine,
+             const ch_ldf_cell& a_corr_coar)
   {
     CH_TIME("CHF_ICE_VTO::AMRProlong");
-    ch_mayday::Error("not implmented");
+    pr_dbl grid_fine = a_corr_fine.disjointBoxLayout();
+    DisjointBoxLayout grid_cofi;
+    int   ncomp = a_correction.nComp();
+    Interval interv(0, ncomp-1);
+    IntVect ivg = a_coarseCorrection.ghostVect();
+    int  ref_to_coar = m_ref_rat[m_start_level-1];
+    coarsen(grid_cofi,  grid_fine, ref_to_coar);
+    ch_ldf corr_cofi(grids_cofi, ncomp , ivg);
+    a_corr_coar.copyTo(interv, corr_cofi, interv);
+
+    Real dx_coar = m_dx*ref_to_coar;
+    DataIterator dit_fine = grid_fine.dataIterator();
+    for(int ibox = 0; ibox < dit_fine.size(); ibox++)
+    {
+      auto dit = dit_fine[ibox];
+      ch_ldf& corr_fab_fine =  a_corr_fine[dit];
+      ch_ldf& corr_fab_cofi =    corr_cofi[dit];
+      Box        valid_fine =   grid_fine[dit];
+
+      // need this if we need to set physical BC's
+      // on coarse-level correction.
+      ProblemDomain crseDomain(m_domain);
+      crseDomain.coarsen(m_refToCoar);
+
+      FORT_PROLONGVTOP(CHF_FRA(phi),
+                       CHF_CONST_FRA(coarse),
+                       CHF_BOX(valid_fine),
+                       CHF_CONST_INT(m_refToCoar));
   }
 
 ///
