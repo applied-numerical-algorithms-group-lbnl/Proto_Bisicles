@@ -36,6 +36,9 @@ public:
   typedef                     ChF_Ice_Viscous_Tensor_Op  ch_ice_op;
   typedef                                     FArrayBox  ch_fab_cell;
   typedef                                       FluxBox  ch_fab_flux;
+  typedef                                       IntVect  ch_iv;
+  typedef                                      RealVect  ch_rv;
+  typedef                                      Interval  ch_interv;
   typedef                             DisjointBoxLayout  ch_dbl;
   typedef                                 ProblemDomain  ch_dom;
   typedef                                  DataIterator  ch_dit;
@@ -75,19 +78,19 @@ private:
       m_dx *= m_ref_ratioToAMR;
     }
 
-    m_grad.define(m_dbl, SpaceDim*SpaceDim, IntVect::Unit);
+    m_grad.define(m_dbl, SpaceDim*SpaceDim, ch_iv::Unit);
       
       
   }
         
 
   ///This is  the stuff that came in during construction
-  ProblemDomain                m_coarseDomain       ;
+  ch_dom                       m_coarseDomain       ;
   ConstitutiveRelation*        m_constRel           ;
   BasalFrictionRelation*       m_basalFrictionRel   ;
-  Vector<DisjointBoxLayout>    m_grids              ;
+  Vector<ch_dbl>               m_grids              ;
   Vector<int>                  m_ref_rat             ;
-  RealVect                     m_dxCrse             ;
+  ch_rv                        m_dxCrse             ;
   IceThicknessIBC*             m_bc                 ;
   int                          m_numLevels          ;
   int                          m_start_level         ;
@@ -100,7 +103,7 @@ private:
   ch_dbl                       m_dbl;
   ch_ldf_cell                  m_grad;
   Real                         m_dx;
-  LevelDataOps<FArrayBox>      m_levelOps;
+  LevelDataOps<ch_fab_cell>      m_levelOps;
 
       
 public:
@@ -128,9 +131,9 @@ public:
   ChF_Ice_Viscous_Tensor_Op(const ch_dom                   &  a_coarseDomain       ,
                             ConstitutiveRelation           *  a_constRel           ,
                             BasalFrictionRelation          *  a_basalFrictionRel   ,
-                            const Vector<DisjointBoxLayout>&  a_grids          ,
+                            const Vector<ch_dbl>           &  a_grids          ,
                             const Vector<int>              &  a_ref_rat       ,
-                            const RealVect                 &  a_dxCrse             ,
+                            const ch_rv                    &  a_dxCrse             ,
                             IceThicknessIBC                *  a_bc                 ,
                             int                               a_numLevels          ,
                             int                               a_start_level         ,
@@ -150,31 +153,32 @@ public:
     defineLocalData();
   }
 
-  ///mostly poached from lib/src/AMRElliptic/ViscousTensorOp.cpp
+  ///
+  /**
+     Poached from lib/src/AMRElliptic/ViscousTensorOp.cpp  tarted up.
+     VTO has a bunch of options but I am only using piecewise constant.
+  **/
   virtual void
-  prolongIncrement(ch_ldf_cell      & a_phiThisLevel,
-                   const ch_ldf_cell& a_correctCoarse)
+  prolongIncrement(ch_ldf_cell      & a_phi_fine,
+                   const ch_ldf_cell& a_cor_coar)
   {
 
     CH_TIME("ChF_ICE_VTO::prolongIncrement");
       
-    DisjointBoxLayout dbl = a_phiThisLevel.disjointBoxLayout();
+    ch_dbl dbl_fine = a_phi_fine.disjointBoxLayout();
+    ch_dit dit_fine = dbl_fine.dataIterator();
     int mgref = 2; //this is a multigrid func
-
-    for (DataIterator dit = a_phiThisLevel.dataIterator(); dit.ok(); ++dit)
+    for (int ibox = 0; ibox < dit_fine.size(); ibox++)
     {
-      FArrayBox& phi =  a_phiThisLevel[dit];
-      const FArrayBox& coarse = a_correctCoarse[dit];
-      Box region = dbl.get(dit());
-      Box cBox = coarsen(region, mgref);
-      /**
-         Standard VTO has a linear interpolation option
-         This code matches the case in VTO where
-         s_prolongType == piecewiseConstant
-      **/
-      FORT_PROLONGVTOP(CHF_FRA(phi),
-                       CHF_CONST_FRA(coarse),
-                       CHF_BOX(region),
+      auto               dit      =    dit_fine[ibox];
+      ch_fab_cell      & fab_fine =  a_phi_fine[dit];
+      const ch_fab_cell& fab_coar =  a_cor_coar[dit];
+      ch_box valid_fine = dbl_fine[dit];
+      ch_box valid_cofi = coarsen(valid_fine, mgref);
+
+      FORT_PROLONGVTOP(CHF_FRA(      fab_fine),
+                       CHF_CONST_FRA(fab_coar),
+                       CHF_BOX(    valid_fine),
                        CHF_CONST_INT(mgref));
     }
   } //end function prolongIncrement
@@ -189,9 +193,8 @@ public:
   /**
      I am indulging in the fantasy that I can finally write a bc function that makes more sense.  
      This fills corners outside the domain with something reasonable.    
-     As the Boss said, love is bigger than a Honda.  It really is bigger than a Subaru.
   **/
-  void reflectBCSide(ch_fab_cell      &      a_state,
+  void reflectBCSide(ch_fab_cell &      a_state,
                      const ch_box&      a_valid,
                      const ch_dom&      a_dom,
                      int                a_dir,
@@ -230,11 +233,11 @@ public:
       //this should cover (with something reasonable) corners outside the domain
       for (BoxIterator bit(start_box); bit.ok(); ++bit)
       {
-        IntVect iv_first_ghost = bit();
+        ch_iv iv_first_ghost = bit();
         for(int ighost = 0; ighost < a_nghost; ighost++)
         {
-          IntVect iv_src =  iv_first_ghost - (ighost+1)*isign*BASISV(a_dir);
-          IntVect iv_dst =  iv_first_ghost + ( ighost )*isign*BASISV(a_dir);
+          ch_iv iv_src =  iv_first_ghost - (ighost+1)*isign*BASISV(a_dir);
+          ch_iv iv_dst =  iv_first_ghost + ( ighost )*isign*BASISV(a_dir);
           Real reflectSign  = 1.;
           if(a_reflectOdd)
           {
@@ -316,8 +319,8 @@ public:
       int  refToCoar = m_ref_rat[m_start_level-1];
       setToZero(m_grad);
       int ncomp = SpaceDim;
-      DisjointBoxLayout  grids_fine     = a_phi_fine.disjointBoxLayout();
-      DisjointBoxLayout* grids_coar_ptr = &m_grids[m_start_level-1];
+      ch_dbl  grids_fine     = a_phi_fine.disjointBoxLayout();
+      ch_dbl* grids_coar_ptr = &m_grids[m_start_level-1];
       TensorCFInterp    interp_with_coarser;  //_
       interp_with_coarser.define(grids_fine, grids_coar_ptr,
                                  dx_fine, refToCoar, ncomp,
@@ -361,11 +364,11 @@ public:
   fillGrad(const ch_ldf_cell&       a_phi)
   {
     CH_TIME("ViscousTensorOp::fillGrad");  
-    LevelData<FArrayBox>& phi = (LevelData<FArrayBox>&)a_phi;
+    ch_ldf_cell& phi = (ch_ldf_cell&)a_phi;
     phi.exchange();
-    const DisjointBoxLayout& grids = a_phi.disjointBoxLayout();
+    const ch_dbl& grids = a_phi.disjointBoxLayout();
     //compute gradient of phi for parts NOT in ghost cells
-    for (DataIterator dit = grids.dataIterator(); dit.ok(); ++dit)
+    for (ch_dit dit = grids.dataIterator(); dit.ok(); ++dit)
     {
       cellGrad(m_grad[dit()],
                a_phi [dit()],
@@ -380,7 +383,7 @@ public:
                  Box&                 a_hiBox,
                  int&                 a_hasHi,
                  Box&                 a_centerBox,
-                 const ProblemDomain& a_eblg,
+                 const ch_dom& a_eblg,
                  const Box&           a_inBox,
                  const int&           a_dir)
   {
@@ -446,11 +449,11 @@ public:
 
   /// another refugee from AMRElliptic VTO
   void
-  getFaceDivAndGrad(FArrayBox&             a_faceDiv,
-                    FArrayBox&             a_faceGrad,
-                    const FArrayBox&       a_data,
-                    const FArrayBox&       a_gradData,
-                    const ProblemDomain&   a_domain,
+  getFaceDivAndGrad(ch_fab_cell&             a_faceDiv,
+                    ch_fab_cell&             a_faceGrad,
+                    const ch_fab_cell&       a_data,
+                    const ch_fab_cell&       a_gradData,
+                    const ch_dom&   a_domain,
                     const Box&             a_faceBox,
                     const int&             a_faceDir,
                     const Real             a_dx)
@@ -517,11 +520,11 @@ public:
      adapted from Chombo/lib/src/AMRElliptic/VTO
   **/
   void
-  getFlux(FArrayBox&       a_flux,
-          const FArrayBox& a_data,
-          const FArrayBox& a_gradData,
-          const FArrayBox& a_etaFace,
-          const FArrayBox& a_lambdaFace,
+  getFlux(ch_fab_cell&       a_flux,
+          const ch_fab_cell& a_data,
+          const ch_fab_cell& a_gradData,
+          const ch_fab_cell& a_etaFace,
+          const ch_fab_cell& a_lambdaFace,
           const Box&       a_faceBox,
           int              a_dir,
           Real             a_beta)
@@ -530,8 +533,8 @@ public:
 
     CH_assert(a_data.nComp() == SpaceDim);
     a_flux.resize(a_faceBox, a_data.nComp());
-    FArrayBox  faceDiv(a_faceBox, 1);
-    FArrayBox  faceGrad(a_faceBox, a_gradData.nComp());
+    ch_fab_cell  faceDiv(a_faceBox, 1);
+    ch_fab_cell  faceGrad(a_faceBox, a_gradData.nComp());
     getFaceDivAndGrad(faceDiv, faceGrad, a_data, a_gradData, m_dom, a_faceBox, a_dir, m_dx);
 
     getFluxFromDivAndGrad(a_flux, faceDiv, faceGrad, a_etaFace, a_lambdaFace, a_faceBox, a_dir);
@@ -542,11 +545,11 @@ public:
      From Ye Olde VTO.
   **/
   void
-  getFluxFromDivAndGrad(FArrayBox&       a_flux,
-                        const FArrayBox& a_faceDiv,
-                        const FArrayBox& a_faceGrad,
-                        const FArrayBox& a_etaFace,
-                        const FArrayBox& a_lambdaFace,
+  getFluxFromDivAndGrad(ch_fab_cell&       a_flux,
+                        const ch_fab_cell& a_faceDiv,
+                        const ch_fab_cell& a_faceGrad,
+                        const ch_fab_cell& a_etaFace,
+                        const ch_fab_cell& a_lambdaFace,
                         const Box&       a_faceBox,
                         int              a_dir)
 
@@ -593,7 +596,7 @@ public:
                        AMRLevelOp<ch_ldf_cell>*   a_finerBase)
   {
     CH_TIME("CHF_ICE_VTO::refluxFineCorrection");
-    Interval interv(0, SpaceDim-1);
+    ch_interv interv(0, SpaceDim-1);
     int ref_to_fine = m_ref_rat[m_start_level];
     ch_dbl dbl_fine = a_phi_fine.disjointBoxLayout();
     ch_dbl dbl_coar = a_phi_coar.disjointBoxLayout();
@@ -626,48 +629,50 @@ public:
 
     {//coarse bit
       CH_TIME("incrementCoarse");
-      DataIterator dit = a_phi_coar.dataIterator();
-      for (dit.reset(); dit.ok(); ++dit)
+      ch_dbl dbl_coar = a_phi_coar.disjointBoxLayout();
+      ch_dit dit_coar =   dbl_coar.dataIterator();
+      for (int ibox = 0; ibox < dit_coar.size(); ibox++)
       {
-        const FArrayBox& coarfab    =    a_phi_coar[dit];
-        const FluxBox&   coareta    =    (*eta_coar)[dit];
-        const FluxBox&   coarlambda = (*lambda_coar)[dit];
-        const Box&       gridBox    =   a_phi_coar.getBoxes()[dit];
+        auto dit = dit_coar[ibox];
+        const ch_fab_cell& coarfab    =     a_phi_coar[dit];
+        const ch_fab_flux& coareta    =    (*eta_coar)[dit];
+        const ch_fab_flux& coarlambda = (*lambda_coar)[dit];
+        const ch_box&      gridBox    =      dbl_coar[dit];
 
         for (int idir = 0; idir < SpaceDim; idir++)
         {
-          FArrayBox coarflux;
-          Box faceBox = surroundingNodes(gridBox, idir);
+          ch_fab_cell coarflux;
+          ch_box faceBox = surroundingNodes(gridBox, idir);
           //fillgrad was called before this when applyOp was called
-          this->getFlux(coarflux, coarfab, m_grad[dit()], coareta[idir], coarlambda[idir], faceBox, idir, beta);
+          this->getFlux(coarflux, coarfab, m_grad[dit], coareta[idir], coarlambda[idir], faceBox, idir, beta);
 
           Real scale = 1.0;
-          flux_reg.incrementCoarse(coarflux, scale,dit(),
-                                   interv,interv,idir);
+          flux_reg.incrementCoarse(coarflux, scale,dit,interv,interv,idir);
         }
       }
     }//end coarse bit
     {//fine bit
       
       CH_TIME("incrementFine");
-      DataIterator dit = a_phi_fine.dataIterator();
-      for (dit.reset(); dit.ok(); ++dit)
+      ch_dbl dbl_fine = a_phi_fine.disjointBoxLayout();
+      ch_dit dit_fine =   dbl_fine.dataIterator();
+      for (int ibox = 0; ibox < dit_fine.size(); ibox++)
       {
-        const FArrayBox& finefab    =    a_phi_fine[dit];
-        const FluxBox&   fineeta    =    (*eta_fine)[dit];
-        const FluxBox&   finelambda = (*lambda_fine)[dit];
-        const Box&       gridBox    =   a_phi_fine.getBoxes()[dit];
+        auto dit = dit_fine[ibox];
+        const ch_fab_cell& finefab      =     a_phi_fine[dit];
+        const ch_fab_flux&   fineeta    =    (*eta_fine)[dit];
+        const ch_fab_flux&   finelambda = (*lambda_fine)[dit];
+        const ch_box&         gridBox   =      dbl_fine [dit];
 
         for (int idir = 0; idir < SpaceDim; idir++)
         {
-          FArrayBox fineflux;
+          ch_fab_cell fineflux;
           Box faceBox = surroundingNodes(gridBox, idir);
           //fillgrad was called before this when applyOp was called
-          op_f->getFlux(fineflux, finefab, op_f->m_grad[dit()], fineeta[idir], finelambda[idir], faceBox, idir, beta);
+          op_f->getFlux(fineflux, finefab, op_f->m_grad[dit], fineeta[idir], finelambda[idir], faceBox, idir, beta);
 
           Real scale = 1.0;
-          flux_reg.incrementFine(fineflux, scale,dit(),
-                                 interv,interv,idir);
+          flux_reg.incrementFine(fineflux, scale,dit,interv,interv,idir);
         }
       }
     } //end fine bit
@@ -697,31 +702,32 @@ public:
        fillGhostDataOverFineFineInterface(phi_cast);
     **/
     fillGrad(a_phi);
-    const DisjointBoxLayout dbl= a_phi.getBoxes();
-    DataIterator dit = a_phi.dataIterator();
+    const ch_dbl dbl= a_phi.getBoxes();
     //this makes the lhs = alpha*phi
     m_levelOps.setToZero(a_lph);
     incr(a_lph, a_phi, alpha);
     int sdim_comp = SpaceDim;
-    for (dit.begin(); dit.ok(); ++dit)
+    ch_dit data_iter = a_phi.dataIterator();
+    for (int ibox = 0; ibox < data_iter.size(); ibox++)
     {
+      auto dit = data_iter[ibox];
       for (int ivar = 0; ivar < SpaceDim; ivar++)
       {
         int src = 0; int dst = ivar; int one_comp = 1;
-        a_lph[dit()].mult((*acoef_ptr)[dit()],src,dst,one_comp);
+        a_lph[dit].mult((*acoef_ptr)[dit],src,dst,one_comp);
       }
-      Box gridBox = dbl.get(dit());
-      FluxBox flux(gridBox, SpaceDim);
-      FluxBox& eta    = (   *eta_ptr)[dit];
-      FluxBox& lambda = (*lambda_ptr)[dit];
+      Box gridBox = dbl.get(dit);
+      ch_fab_flux  flux(gridBox, SpaceDim);
+      ch_fab_flux& eta    = (   *eta_ptr)[dit];
+      ch_fab_flux& lambda = (*lambda_ptr)[dit];
 
       //operator is alpha I + (divF) = alpha I + beta div(eta(grad B + grad B^T) + lambda I div B )
       for (int idir = 0; idir < SpaceDim; idir++)
       {
         Box faceBox = surroundingNodes(gridBox, idir);
-        getFlux(flux[idir], a_phi[dit()], m_grad[dit()], eta[idir], lambda[idir],faceBox, idir, beta);
-        FArrayBox& lhsFAB = a_lph[dit()];
-        const FArrayBox& fluxFAB = flux[idir];
+        getFlux(flux[idir], a_phi[dit], m_grad[dit], eta[idir], lambda[idir],faceBox, idir, beta);
+        ch_fab_cell& lhsFAB = a_lph[dit];
+        const ch_fab_cell& fluxFAB = flux[idir];
 
         //beta and eta are part of the flux.
         FORT_ADDDIVFLUXDIRVTOP(CHF_FRA(lhsFAB),
@@ -742,13 +748,13 @@ public:
               int a_ref_rat)
   {
     CH_TIME("CHF_ICE_VTO::restriction");
-    Box ref_box(IntVect::Zero, (a_ref_rat-1)*IntVect::Unit); //_
-    DisjointBoxLayout  dbl_coar = a_resCoar.disjointBoxLayout();
-    DataIterator dit = dbl_coar.dataIterator();
+    Box ref_box(ch_iv::Zero, (a_ref_rat-1)*ch_iv::Unit); //_
+    ch_dbl  dbl_coar = a_resCoar.disjointBoxLayout();
+    ch_dit dit = dbl_coar.dataIterator();
     for (dit.begin(); dit.ok(); ++dit)
     {
-      FArrayBox&       res_coar = a_resCoar[dit()];
-      const FArrayBox& res_fine = a_resFine[dit()];
+      ch_fab_cell&       res_coar = a_resCoar[dit()];
+      const ch_fab_cell& res_fine = a_resFine[dit()];
       Box valid_coar            =  dbl_coar[dit()];
       FORT_AVERAGE( CHF_FRA(        res_coar),
                     CHF_CONST_FRA(  res_fine),
@@ -828,37 +834,37 @@ public:
   {
     CH_TIME("CHF_ICE_VTO::createCoarser");
 
-    IntVect ghost = a_fine.ghostVect();
-    DisjointBoxLayout dbl;
+    ch_iv ghost = a_fine.ghostVect();
+    ch_dbl dbl;
     CH_assert(dbl.coarsenable(2));
     coarsen(dbl, a_fine.disjointBoxLayout(), 2); //multigrid, so coarsen by 2
     a_coarse.define(dbl, a_fine.nComp(), ghost);
   }
     
   void
-  getMultiColors(Vector<IntVect>& a_colors) const
+  getMultiColors(Vector<ch_iv>& a_colors) const
   {
 
 #if CH_SPACEDIM==1
     a_colors.resize(2);
-    a_colors[0] = IntVect::Zero;//(0,0)
-    a_colors[1] = IntVect::Unit;//(1,1)
+    a_colors[0] = ch_iv::Zero;//(0,0)
+    a_colors[1] = ch_iv::Unit;//(1,1)
 #elif CH_SPACEDIM==2
     a_colors.resize(4);
-    a_colors[0] = IntVect::Zero;//(0,0)
-    a_colors[1] = IntVect::Unit;//(1,1)
-    a_colors[2] = IntVect::Zero + BASISV(1);//(0,1)
-    a_colors[3] = IntVect::Zero + BASISV(0);//(1,0)
+    a_colors[0] = ch_iv::Zero;//(0,0)
+    a_colors[1] = ch_iv::Unit;//(1,1)
+    a_colors[2] = ch_iv::Zero + BASISV(1);//(0,1)
+    a_colors[3] = ch_iv::Zero + BASISV(0);//(1,0)
 #elif CH_SPACEDIM==3
     a_colors.resize(8);
-    a_colors[0] = IntVect::Zero;//(0,0,0)
-    a_colors[1] = IntVect::Zero + BASISV(0) + BASISV(1);//(1,1,0)
-    a_colors[2] = IntVect::Zero + BASISV(1) + BASISV(2);//(0,1,1)
-    a_colors[3] = IntVect::Zero + BASISV(0) + BASISV(2);//(1,0,1)
-    a_colors[4] = IntVect::Zero + BASISV(1);//(0,1,0)
-    a_colors[5] = IntVect::Zero + BASISV(0);//(1,0,0)
-    a_colors[6] = IntVect::Zero + BASISV(2);//(0,0,1)
-    a_colors[7] = IntVect::Unit;//(1,1,1)
+    a_colors[0] = ch_iv::Zero;//(0,0,0)
+    a_colors[1] = ch_iv::Zero + BASISV(0) + BASISV(1);//(1,1,0)
+    a_colors[2] = ch_iv::Zero + BASISV(1) + BASISV(2);//(0,1,1)
+    a_colors[3] = ch_iv::Zero + BASISV(0) + BASISV(2);//(1,0,1)
+    a_colors[4] = ch_iv::Zero + BASISV(1);//(0,1,0)
+    a_colors[5] = ch_iv::Zero + BASISV(0);//(1,0,0)
+    a_colors[6] = ch_iv::Zero + BASISV(2);//(0,0,1)
+    a_colors[7] = ch_iv::Unit;//(1,1,1)
 #endif
   }
 ///from MGLevelOp
@@ -874,34 +880,34 @@ public:
     ch_ldf_cell& phi_cast = (ch_ldf_cell &)(a_phi);
     this->computeCoefficients( eta_ptr, lambda_ptr, acoef_ptr, relco_ptr, alpha, beta, a_phi);
 
-    LevelData<FArrayBox> lphi;
+    ch_ldf_cell lphi;
     m_levelOps.create(lphi, a_rhs);
-    LevelData<FArrayBox> prevPhi;
+    ch_ldf_cell prevPhi;
     int var_comp = SpaceDim;
     m_levelOps.create(prevPhi, a_rhs);
 
     // do first red, then black passes
-    const DisjointBoxLayout& dbl = a_phi.disjointBoxLayout();
+    const ch_dbl& dbl = a_phi.disjointBoxLayout();
     int whichIter = 0;
     bool done = false;
 
-    Vector<IntVect> relax_colors;
+    Vector<ch_iv> relax_colors;
     getMultiColors(relax_colors);
     for(int iiter = 0; iiter < a_iterations; iiter++)
     {
       for (int icolor = 0; icolor < relax_colors.size(); icolor++)
       {
         fillGhostData(a_phi, NULL);
-        const IntVect& color= relax_colors[icolor];
+        const ch_iv& color= relax_colors[icolor];
         //after this lphi = L(phi)
         applyOperator(lphi, a_phi);
 
-        for (DataIterator dit = dbl.dataIterator(); dit.ok(); ++dit)
+        for (ch_dit dit = dbl.dataIterator(); dit.ok(); ++dit)
         {
           Box dblBox  = dbl.get(dit());
 
-          IntVect loIV = dblBox.smallEnd();
-          IntVect hiIV = dblBox.bigEnd();
+          ch_iv loIV = dblBox.smallEnd();
+          ch_iv hiIV = dblBox.bigEnd();
 
           for (int idir = 0; idir < SpaceDim; idir++)
           {
@@ -946,7 +952,7 @@ public:
     return retval;
   }
   
-  ///borrowed from VTO
+  ///borrowed from VTO and remodelled
   virtual void
   AMRRestrict(ch_ldf_cell      & a_res_coar,
               const ch_ldf_cell& a_res_fine,
@@ -956,79 +962,83 @@ public:
   {
     CH_TIME("CHF_ICE_VTO::AMRRestrict");
 
-    ch_ldf        resid_fine;
-    create(       resid_fine, a_residual);
+    ch_ldf_cell resid_fine;
+    create(     resid_fine, a_res_fine);
     ///a_resid_fine used as RHS here
-    AMRResidualNF(resid_fine, a_correction, a_coarseCorrection, a_res_fine, true);
+    AMRResidualNF(resid_fine, a_cor_fine, a_cor_coar, a_res_fine, true);
     ch_dbl  dbl_coar = a_res_coar.disjointBoxLayout();
-    DataIterator dat_iter = a_res_fine.dataIterator();
+    ch_dit dat_iter = a_res_fine.dataIterator();
     ///Think of ref_box as the box within the cell.  
     int  ref_to_coar = m_ref_rat[m_start_level-1];
-    Box ref_box(IntVect::Zero, (m_refToCoar-1)*IntVect::Unit);
+    Box ref_box(ch_iv::Zero, (ref_to_coar-1)*ch_iv::Unit);
     for (int ibox = 0; ibox < dat_iter.size(); ibox++)
     {
       auto dit = dat_iter[ibox];
-      ch_fab       & res_fab_coar = a_res_coar[dit];
-      const ch_fab & res_fab_fine = resid_fine[dit];
-      const Box    & valid        =    dblCoar[dit];
+      ch_fab_cell       & res_fab_coar = a_res_coar[dit];
+      const ch_fab_cell & res_fab_fine = resid_fine[dit];
+      const Box         & valid_coar   =   dbl_coar[dit];
       FORT_AVERAGE( CHF_FRA(      res_fab_coar),
                     CHF_CONST_FRA(res_fab_fine),
-                    CHF_BOX(valid),
-                    CHF_CONST_INT(ref_to_coar),
-                    CHF_BOX(ref_box) );
+                    CHF_BOX(        valid_coar),
+                    CHF_CONST_INT( ref_to_coar),
+                    CHF_BOX(       ref_box) );
     }
 
   }
 
-  ///borrowed from VTO
+  ///borrowed from VTO and gussied-up
   /** a_correction += I[2h->h](a_coarseCorrection) */
   virtual void
   AMRProlong(ch_ldf_cell      & a_corr_fine,
              const ch_ldf_cell& a_corr_coar)
   {
     CH_TIME("CHF_ICE_VTO::AMRProlong");
-    pr_dbl grid_fine = a_corr_fine.disjointBoxLayout();
-    DisjointBoxLayout grid_cofi;
-    int   ncomp = a_correction.nComp();
-    Interval interv(0, ncomp-1);
-    IntVect ivg = a_coarseCorrection.ghostVect();
+    ch_dbl grid_fine = a_corr_fine.disjointBoxLayout();
+    ch_dbl grid_cofi;
+    int   ncomp   = a_corr_fine.nComp();
+    ch_interv interv(0, ncomp-1);
+    ch_iv ivg = a_corr_coar.ghostVect();
     int  ref_to_coar = m_ref_rat[m_start_level-1];
-    coarsen(grid_cofi,  grid_fine, ref_to_coar);
-    ch_ldf corr_cofi(grids_cofi, ncomp , ivg);
+    coarsen(grid_cofi,    grid_fine, ref_to_coar);
+    ch_ldf_cell corr_cofi(grid_cofi, ncomp , ivg);
     a_corr_coar.copyTo(interv, corr_cofi, interv);
 
     Real dx_coar = m_dx*ref_to_coar;
-    DataIterator dit_fine = grid_fine.dataIterator();
+    ch_dit dit_fine = grid_fine.dataIterator();
     for(int ibox = 0; ibox < dit_fine.size(); ibox++)
     {
       auto dit = dit_fine[ibox];
-      ch_ldf& corr_fab_fine =  a_corr_fine[dit];
-      ch_ldf& corr_fab_cofi =    corr_cofi[dit];
-      Box        valid_fine =   grid_fine[dit];
+      ch_fab_cell& corr_fab_fine =  a_corr_fine[dit];
+      ch_fab_cell& corr_fab_cofi =    corr_cofi[dit];
+      Box             valid_fine =   grid_fine[dit];
 
       // need this if we need to set physical BC's
       // on coarse-level correction.
-      ProblemDomain crseDomain(m_domain);
-      crseDomain.coarsen(m_refToCoar);
+      ch_dom crseDomain(m_dom);
+      crseDomain.coarsen(ref_to_coar);
 
-      FORT_PROLONGVTOP(CHF_FRA(phi),
-                       CHF_CONST_FRA(coarse),
+      FORT_PROLONGVTOP(CHF_FRA(      corr_fab_fine),
+                       CHF_CONST_FRA(corr_fab_cofi),
                        CHF_BOX(valid_fine),
-                       CHF_CONST_INT(m_refToCoar));
-  }
+                       CHF_CONST_INT(ref_to_coar));
+    }//end loop over boxes
+  }//  end function AMRProlong
 
-///
+/// borrowed from VTO and hosed off
 /** a_residual = a_residual - L(a_correction, a_coarseCorrection) */
   virtual void
-  AMRUpdateResidual(ch_ldf_cell      & a_residual,
-                    const ch_ldf_cell& a_correction,
-                    const ch_ldf_cell& a_coarseCorrection)
+  AMRUpdateResidual(ch_ldf_cell      & a_res_fine,
+                    const ch_ldf_cell& a_cor_fine,
+                    const ch_ldf_cell& a_cor_coar)
   {
     CH_TIME("CHF_ICE_VTO::AMRUpdateResidual");
-    ch_mayday::Error("not implmented");
+    ch_ldf_cell resid;
+    this->create(resid, a_res_fine);
+    this->AMRResidualNF(resid, a_cor_fine, a_cor_coar, a_res_fine, true);
+    this->assign(a_res_fine, resid);
   }
 
-///
+/// borrowed from VTO and made more presentable
 /**
  */
   virtual void createCoarsened(ch_ldf_cell&       a_lhs,
@@ -1036,7 +1046,18 @@ public:
                                const int&     a_ref_rat)
   {
     CH_TIME("CHF_ICE_VTO::createCoarsened");
-    ch_mayday::Error("not implmented");
+
+    int num_comp = a_rhs.nComp();
+    ch_iv iv_ghost = a_rhs.ghostVect();
+
+    ch_dbl dbl_fine = a_rhs.disjointBoxLayout();
+    CH_assert(dbl_fine.coarsenable(a_ref_rat));
+
+    ch_dbl  dbl_cofi;
+    coarsen(dbl_cofi, dbl_fine, a_ref_rat);
+
+    a_lhs.define(dbl_cofi, num_comp, iv_ghost);
+
   }
 }; //end class ChF_Ice_Viscous_Tensor_Op
   
@@ -1053,6 +1074,7 @@ public:
   typedef                                  DataIterator  ch_dit;
   typedef                                        MayDay  ch_mayday;
   typedef                                           Box  ch_box;
+  typedef                                      RealVect  ch_rv;
   typedef                             LevelFluxRegister  ch_flux_reg;
   typedef                      LevelData< ch_fab_flux >  ch_ldf_flux;
   typedef                      LevelData< ch_fab_cell >  ch_ldf_cell;
@@ -1067,23 +1089,23 @@ public:
   /**
      The only member data for this class is the stuff that comes in through the constructor.   
   **/
-  ProblemDomain              m_coarseDomain       ;
+  ch_dom              m_coarseDomain       ;
   ConstitutiveRelation*      m_constRel           ;
   BasalFrictionRelation*     m_basalFrictionRel   ;
-  Vector<DisjointBoxLayout>  m_grids          ;
+  Vector<ch_dbl>  m_grids          ;
   Vector<int>                m_ref_rat       ;
-  RealVect                   m_dxCrse             ;
+  ch_rv                   m_dxCrse             ;
   IceThicknessIBC*           m_bc                 ;
   int                        m_numLevels          ;
 
 
   ///
-  ChF_Ice_VTO_Factory(const ProblemDomain&              a_coarseDomain       ,
+  ChF_Ice_VTO_Factory(const ch_dom&              a_coarseDomain       ,
                       ConstitutiveRelation*             a_constRel           ,
                       BasalFrictionRelation*            a_basalFrictionRel   ,
-                      const Vector<DisjointBoxLayout>&  a_vectGrids          ,
+                      const Vector<ch_dbl>&  a_vectGrids          ,
                       const Vector<int>&                a_ref_rat       ,
-                      const RealVect&                   a_dxCrse             ,
+                      const ch_rv&                   a_dxCrse             ,
                       IceThicknessIBC*                  a_bc                 ,
                       int                               a_numLevels          )
   {
@@ -1234,6 +1256,7 @@ class ChF_FAS_Ice_Solver : public IceVelocitySolver
   typedef                           DataIterator        ch_dit;
   typedef                                  MayDay       ch_mayday;
   typedef                                     Box       ch_box;
+  typedef                                     RealVect  ch_rv;
   typedef                       LevelFluxRegister       ch_flux_reg;
   typedef     Base_Simplified_AMRLevelOp< ch_ldf_cell > ch_amrlevelop;
   typedef                AMRFASMultiGrid< ch_ldf_cell > ch_amrfasmg;
@@ -1253,23 +1276,23 @@ public:
   /**
      The only member data for this class is the stuff that comes in through the constructor.   
   **/
-  ProblemDomain              m_coarseDomain       ;
+  ch_dom              m_coarseDomain       ;
   ConstitutiveRelation*      m_constRel           ;
   BasalFrictionRelation*     m_basalFrictionRel   ;
-  Vector<DisjointBoxLayout>  m_grids              ;
+  Vector<ch_dbl>  m_grids              ;
   Vector<int>                m_ref_rat             ;
-  RealVect                   m_dxCrse             ;
+  ch_rv                   m_dxCrse             ;
   IceThicknessIBC*           m_bc                 ;
   int                        m_numLevels          ;
 
 
   ///strong construction only 
-  ChF_FAS_Ice_Solver(const ProblemDomain&              a_coarseDomain    ,
+  ChF_FAS_Ice_Solver(const ch_dom&              a_coarseDomain    ,
                      ConstitutiveRelation*             a_constRel        ,
                      BasalFrictionRelation*            a_basalFrictionRel,
-                     const Vector<DisjointBoxLayout>&  a_grids           ,
+                     const Vector<ch_dbl>&  a_grids           ,
                      const Vector<int>&                a_ref_rat          ,
-                     const RealVect&                   a_dxCrse          ,
+                     const ch_rv&                   a_dxCrse          ,
                      IceThicknessIBC*                  a_bc              ,
                      int                               a_numLevels       )
   :IceVelocitySolver()
@@ -1334,12 +1357,12 @@ public:
        so this function is needed to get stuff to compile.
        That said, I never call this particular function, so it is just a placeholder.
     **/
-  virtual void define(const ProblemDomain& a_coarseDomain,
+  virtual void define(const ch_dom& a_coarseDomain,
                       ConstitutiveRelation* a_constRel,
                       BasalFrictionRelation* a_FrictionRel,
-                      const Vector<DisjointBoxLayout>& a_vectGrids,
+                      const Vector<ch_dbl>& a_vectGrids,
                       const Vector<int>& a_ref_rat,
-                      const RealVect& a_dxCrse,
+                      const ch_rv& a_dxCrse,
                       IceThicknessIBC* a_bc,
                       int a_numLevels)
   {
