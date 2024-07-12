@@ -25,10 +25,12 @@
 
 ///
 /**
-   This is a pass-through class for ViscousTensorOp for the nonlinear ice problem.
-   Original idea: Each operator owns a ViscousTensorOp.   It turns out this is a terrible idea.
-   VTO precomputes tons of stuff.  
-   I will poach heavily from  VTO.   I am also using the simpler Base_Simplified_AMRLevelOp
+   This a fresh take on ViscousTensorOp specialized to compute the 
+   coefficients for the Ice solver.   This is fully nonlinear
+   in that the coefficients are not stored but computed fresh from
+   the solution on demand.
+   I will poach heavily from  VTO.   
+   I am also using the simpler Base_Simplified_AMRLevelOp rather than raw AMRLevelOp.
 **/
 class ChF_Ice_Viscous_Tensor_Op:  public Base_Simplified_AMRLevelOp< LevelData<FArrayBox> >
 {
@@ -89,12 +91,13 @@ private:
   ConstitutiveRelation*        m_constRel           ;
   BasalFrictionRelation*       m_basalFrictionRel   ;
   Vector<ch_dbl>               m_grids              ;
-  Vector<int>                  m_ref_rat             ;
+  Vector<int>                  m_ref_rat            ;
   ch_rv                        m_dxCrse             ;
   IceThicknessIBC*             m_bc                 ;
+  Vector<RefCountedPtr<LevelSigmaCS > >   m_coordSys;
   int                          m_numLevels          ;
-  int                          m_start_level         ;
-  int                          m_ref_ratioToAMR      ;
+  int                          m_start_level        ;
+  int                          m_ref_ratioToAMR     ;
   ///this is the local member data (defined at construction)
   /**
      I am trying to keep this at a minimum but more may creep in here for performance reasons.
@@ -112,7 +115,9 @@ public:
 
   ///
   /**
-     compute coefficients needed for the operator given an input state and all that other stuff we saved.
+     Compute coefficients needed for the operator 
+     given an input state and all that other stuff we saved.
+     The formula below is inferred from NonlinearViscousTensor.cpp
   **/
   void  computeCoefficients( RefCountedPtr< ch_ldf_flux >       &      a_eta,
                              RefCountedPtr< ch_ldf_flux >       &      a_lambda,
@@ -120,36 +125,137 @@ public:
                              RefCountedPtr< ch_ldf_cell >       &      a_relco,
                              Real                               &      a_alpha,
                              Real                               &      a_beta,
-                             const ch_ldf_cell                  &      a_phi)
+                             const ch_ldf_cell                  &      a_phi_fine,
+                             const ch_ldf_cell                  *      a_phi_coar_ptr,
+                             )
 
   {
-    ch_mayday::Error("ChF_Ice_VTO::computeCoefficients not implemented yet.");
+    /** NonlinearViscousTensorOp:
+        Real m_scale; // scale mu,alpha by 1/m_scale 
+        So we set scale = 1.
+
+      Vector<RefCountedPtr<LevelSigmaCS > > m_coordSys;
+      (*m_constRelPtr).computeFaceMu(levelMu,...levelCoords
+    **/
+    Real scale = 1.;
+    LevelSigmaCS& level_coords = *m_coordSys[m_start_level]; ///not sure about this bit
+    int ref_to_coar = 4586;
+    if(m_start_level > 0)
+    {  
+      ref_to_coar = m_ref_rat[m_start_level-1];
+    }
+    
+    m_constRel->computeFaceMu(a_phi, scale, a_phi_coar_ptr,
+                              ref_to_coar,
+                              a_eta, //called faceA in NLVTO
+                              level_coords,
+                              m_dom,
+                              ch_iv::Zero);
+     
+
+    /** NonlinearViscousTensorOp:
+     **/
+
+    /** NonlinearViscousTensorOp:
+     **/
+    /**
+      (*m_constRelPtr).computeFaceMu(levelMu,
+                                     levelVel, m_scale, 
+                                     crseVelPtr,
+                                     nRefCrse,
+                                     *m_faceA[lev],
+                                     levelCoords,
+				     levelDomain,
+                                     IntVect::Zero);
+
+      // now limit and  multiply by ice thickness H
+      const LevelData<FluxBox>& faceH = levelCoords.getFaceH();
+      LevelData<FluxBox>* muCoefPtr = m_muCoef[lev];
+      for (dit.begin(); dit.ok(); ++dit)
+        {
+          for (int dir=0; dir<SpaceDim; dir++)
+            {
+	      FArrayBox& thisMu = levelMu[dit][dir];
+	      const Box& box = thisMu.box();
+	       
+	      FORT_MAXFAB1(CHF_FRA(thisMu),
+	       		  CHF_CONST_REAL(m_muMin),
+	       		  CHF_BOX(box));
+
+	      if (muCoefPtr!=NULL)
+		{
+		  levelMu[dit][dir].mult( (*muCoefPtr)[dit][dir] );
+		}
+
+	      Box facebox = levelGrids[dit].surroundingNodes(dir);
+	      CH_assert(levelMu[dit][dir].min(facebox) >= 0.0);
+
+              levelMu[dit][dir].mult(faceH[dit][dir],
+                                    levelMu[dit][dir].box(),0,0,1);
+	    
+	      FORT_MINFAB1(CHF_FRA(thisMu),
+	       		  CHF_CONST_REAL(m_muMax),
+	       		  CHF_BOX(box));
+
+	    }
+        
+	  // also update alpha
+          const Box& gridBox = levelGrids[dit];
+
+	  m_basalFrictionRelPtr->computeAlpha
+		      (levelAlpha[dit], levelVel[dit], levelC[dit] , m_scale, 	
+	     levelCoords, dit, lev, gridBox);
+	  levelAlpha[dit] += (*m_C0[lev])[dit];
+
+	  //artificial drag
+	  if (m_artificialDragCoef > 0.0)
+	    {
+	      const Real& a = m_artificialDragCoef;
+	      Real asq = a*a; 
+	      Real p = 0.5*(m_artificialDragPower-1.0);
+	      const FArrayBox& u = levelVel[dit];
+	      for ( BoxIterator bit(gridBox); bit.ok(); ++bit)
+		{
+		  const IntVect& iv = bit();
+		  Real usq = D_TERM(u(iv,0)*u(iv,0), + u(iv,1)*u(iv,1), + u(iv,2)*u(iv,2));
+		  levelAlpha[dit](iv) += std::pow(asq * usq,p)*a; // alpha = a^(n-1) |u|^(n-1) a  => |alpha*u| = a^n |u|^n
+ 		}
+	    }
+	  CH_assert(levelAlpha[dit].min(gridBox) >= 0.0);
+
+	  
+	} // end loop over grids		
+
+    **/
+    
   }
       
   
   /// 
-  ChF_Ice_Viscous_Tensor_Op(const ch_dom                   &  a_coarseDomain       ,
-                            ConstitutiveRelation           *  a_constRel           ,
-                            BasalFrictionRelation          *  a_basalFrictionRel   ,
-                            const Vector<ch_dbl>           &  a_grids          ,
-                            const Vector<int>              &  a_ref_rat       ,
-                            const ch_rv                    &  a_dxCrse             ,
-                            IceThicknessIBC                *  a_bc                 ,
-                            int                               a_numLevels          ,
-                            int                               a_start_level         ,
-                            int                               a_ref_ratioToAMR      )
+  ChF_Ice_Viscous_Tensor_Op(const ch_dom                          &  a_coarseDomain       ,
+                            ConstitutiveRelation                  *  a_constRel           ,
+                            BasalFrictionRelation                 *  a_basalFrictionRel   ,
+                            const Vector<ch_dbl>                  &  a_grids              ,
+                            const Vector<int>                     &  a_ref_rat            ,
+                            const ch_rv                           &  a_dxCrse             ,
+                            IceThicknessIBC                       *  a_bc                 ,
+                            Vector<RefCountedPtr<LevelSigmaCS > > &  a_coordSys           ,
+                            int                                      a_numLevels          ,
+                            int                                      a_start_level        ,
+                            int                                      a_ref_ratioToAMR     )
   {
 
     m_coarseDomain       = a_coarseDomain     ;
     m_constRel           = a_constRel         ;
     m_basalFrictionRel   = a_basalFrictionRel ;
     m_grids              = a_grids            ;
-    m_ref_rat             = a_ref_rat           ;
+    m_ref_rat            = a_ref_rat          ;
     m_dxCrse             = a_dxCrse           ;
     m_bc                 = a_bc               ;
+    m_coordSys           = a_coordSys         ;
     m_numLevels          = a_numLevels        ;
-    m_start_level         = a_start_level       ;
-    m_ref_ratioToAMR      = a_ref_ratioToAMR    ;
+    m_start_level        = a_start_level      ;
+    m_ref_ratioToAMR     = a_ref_ratioToAMR   ;
     defineLocalData();
   }
 
@@ -542,7 +648,7 @@ public:
   }
   
   /**
-     From Ye Olde VTO.
+     Taken from VTO and given a bit of spit and polish.
   **/
   void
   getFluxFromDivAndGrad(ch_fab_cell&       a_flux,
@@ -1171,11 +1277,12 @@ public:
                           m_constRel        ,
                           m_basalFrictionRel,
                           m_grids           ,
-                          m_ref_rat          ,
+                          m_ref_rat         ,
                           m_dxCrse          ,
                           m_bc              ,
                           m_numLevels       ,
-                          start_level        ,
+                          m_coordSys        ,
+                          start_level       ,
                           refRatioToAMR     );
       retval = static_cast<ch_amrlevelop*>(ice_op_ptr);
     }
@@ -1222,12 +1329,14 @@ public:
         = new ch_ice_op(  m_coarseDomain       ,
                           m_constRel           ,
                           m_basalFrictionRel   ,
-                          m_grids          ,
-                          m_ref_rat       ,
+                          m_grids              ,
+                          m_ref_rat            ,
                           m_dxCrse             ,
                           m_bc                 ,
+                          m_coordSys           ,
                           m_numLevels          ,
-                          start_level,  refRatioToAMR);
+                          start_level          ,
+                          refRatioToAMR);
       retval = static_cast<ch_amrlevelop*>(ice_op_ptr);
     }
     return retval;
@@ -1276,34 +1385,37 @@ public:
   /**
      The only member data for this class is the stuff that comes in through the constructor.   
   **/
-  ch_dom              m_coarseDomain       ;
-  ConstitutiveRelation*      m_constRel           ;
-  BasalFrictionRelation*     m_basalFrictionRel   ;
-  Vector<ch_dbl>  m_grids              ;
-  Vector<int>                m_ref_rat             ;
-  ch_rv                   m_dxCrse             ;
-  IceThicknessIBC*           m_bc                 ;
-  int                        m_numLevels          ;
+  ch_dom                                  m_coarseDomain       ;
+  ConstitutiveRelation*                   m_constRel           ;
+  BasalFrictionRelation*                  m_basalFrictionRel   ;
+  Vector<ch_dbl>                          m_grids              ;
+  Vector<int>                             m_ref_rat            ;
+  ch_rv                                   m_dxCrse             ;
+  IceThicknessIBC*                        m_bc                 ;
+  int                                     m_numLevels          ;
+  Vector<RefCountedPtr<LevelSigmaCS > >   m_coordSys           ;
 
 
   ///strong construction only 
-  ChF_FAS_Ice_Solver(const ch_dom&              a_coarseDomain    ,
-                     ConstitutiveRelation*             a_constRel        ,
-                     BasalFrictionRelation*            a_basalFrictionRel,
-                     const Vector<ch_dbl>&  a_grids           ,
-                     const Vector<int>&                a_ref_rat          ,
-                     const ch_rv&                   a_dxCrse          ,
-                     IceThicknessIBC*                  a_bc              ,
-                     int                               a_numLevels       )
+  ChF_FAS_Ice_Solver(const ch_dom                          &  a_coarseDomain    ,
+                     ConstitutiveRelation                  *  a_constRel        ,
+                     BasalFrictionRelation                 *  a_basalFrictionRel,
+                     const Vector<ch_dbl>                  &  a_grids           ,
+                     const Vector<int>                     &  a_ref_rat         ,
+                     const ch_rv                           &  a_dxCrse          ,
+                     IceThicknessIBC                       *  a_bc              ,
+                     Vector<RefCountedPtr<LevelSigmaCS > > &  a_coordSys        ,
+                     int                                      a_numLevels       )
   :IceVelocitySolver()
   {
     m_coarseDomain       =  a_coarseDomain    ;
     m_constRel           =  a_constRel        ;
     m_basalFrictionRel   =  a_basalFrictionRel;
-    m_grids              =  a_grids       ;
-    m_ref_rat             =  a_ref_rat    ;
+    m_grids              =  a_grids           ;
+    m_ref_rat            =  a_ref_rat         ;
     m_dxCrse             =  a_dxCrse          ;
     m_bc                 =  a_bc              ;
+    m_coordSys           =  a_coordSys        ;
     m_numLevels          =  a_numLevels       ;
   }
 
