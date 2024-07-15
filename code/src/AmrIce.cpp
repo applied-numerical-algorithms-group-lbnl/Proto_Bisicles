@@ -1653,7 +1653,7 @@ AmrIce::defineSolver()
                              m_refinement_ratios,
                              dxCrse,
                              m_thicknessIBCPtr,
-                             m_coordSys,
+                             m_vect_coordSys,
                              numLevels);
 
     m_velSolver = static_cast<IceVelocitySolver*>(solver);

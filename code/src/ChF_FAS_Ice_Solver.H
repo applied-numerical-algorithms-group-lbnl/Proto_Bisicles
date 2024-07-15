@@ -125,8 +125,8 @@ public:
                              RefCountedPtr< ch_ldf_cell >       &      a_relco,
                              Real                               &      a_alpha,
                              Real                               &      a_beta,
-                             const ch_ldf_cell                  &      a_phi_fine,
-                             const ch_ldf_cell                  *      a_phi_coar_ptr,
+                             ch_ldf_cell                        &      a_phi_fine,
+                             const ch_ldf_cell                  *      a_phi_coar_ptr
                              )
 
   {
@@ -145,9 +145,10 @@ public:
       ref_to_coar = m_ref_rat[m_start_level-1];
     }
     
-    m_constRel->computeFaceMu(a_phi, scale, a_phi_coar_ptr,
+    m_constRel->computeFaceMu(*a_eta,  //called mu
+                              a_phi_fine, scale, a_phi_coar_ptr,
                               ref_to_coar,
-                              a_eta, //called faceA in NLVTO
+                              *a_lambda, // Glenn's law A ?
                               level_coords,
                               m_dom,
                               ch_iv::Zero);
@@ -706,6 +707,8 @@ public:
     int ref_to_fine = m_ref_rat[m_start_level];
     ch_dbl dbl_fine = a_phi_fine.disjointBoxLayout();
     ch_dbl dbl_coar = a_phi_coar.disjointBoxLayout();
+    ch_ldf_cell & phi_fine_cast = (ch_ldf_cell&)(a_phi_fine); 
+    ch_ldf_cell & phi_coar_cast = (ch_ldf_cell&)(a_phi_coar);
     ChF_Ice_Viscous_Tensor_Op*
       op_f = dynamic_cast<ChF_Ice_Viscous_Tensor_Op*>(a_finerBase);
     /**
@@ -713,8 +716,8 @@ public:
        Ergo, the next two lines  may be unnecessary.
     **/
     this->fillGrad(a_phi_coar);
-    ch_ldf_cell& phi_fine_cast = (ch_ldf_cell&)a_phi_fine;
-    op_f->fillGhostDataOverCoarseFineInterface(phi_fine_cast, &a_phi_coar);
+
+    op_f->fillGhostDataOverCoarseFineInterface(phi_fine_cast, &phi_coar_cast);
     op_f->fillGrad(a_phi_fine);
     ch_dom dom_fine = refine(m_dom, ref_to_fine);
       
@@ -726,8 +729,8 @@ public:
     RefCountedPtr< ch_ldf_cell >        relco_fine, relco_coar;
     Real                                alpha_fine, alpha_coar;
     Real                                 beta_fine,  beta_coar;
-    this->computeCoefficients( eta_coar, lambda_coar, acoef_coar, relco_coar, alpha_coar, beta_coar, a_phi_coar);
-    op_f->computeCoefficients( eta_fine, lambda_fine, acoef_fine, relco_fine, alpha_fine, beta_fine, a_phi_fine);
+    this->computeCoefficients( eta_coar, lambda_coar, acoef_coar, relco_coar, alpha_coar, beta_coar, phi_coar_cast, NULL);
+    op_f->computeCoefficients( eta_fine, lambda_fine, acoef_fine, relco_fine, alpha_fine, beta_fine, phi_fine_cast, &phi_coar_cast);
     CH_assert(std::abs(alpha_coar - alpha_fine) < 1.0e-10);
     CH_assert(std::abs( beta_coar -  beta_fine) < 1.0e-10);
     Real alpha = alpha_coar; Real beta = beta_coar;
@@ -800,7 +803,7 @@ public:
     RefCountedPtr< ch_ldf_cell >   acoef_ptr,  relco_ptr;
     Real                          alpha, beta;
     ch_ldf_cell& phi_cast = (ch_ldf_cell &)(a_phi);
-    this->computeCoefficients( eta_ptr, lambda_ptr, acoef_ptr, relco_ptr, alpha, beta, a_phi);
+    this->computeCoefficients( eta_ptr, lambda_ptr, acoef_ptr, relco_ptr, alpha, beta, phi_cast, NULL);
 
     /**
        already done 
@@ -984,7 +987,7 @@ public:
     RefCountedPtr< ch_ldf_cell >  acoef_ptr, relco_ptr;
     Real                          alpha, beta;
     ch_ldf_cell& phi_cast = (ch_ldf_cell &)(a_phi);
-    this->computeCoefficients( eta_ptr, lambda_ptr, acoef_ptr, relco_ptr, alpha, beta, a_phi);
+    this->computeCoefficients( eta_ptr, lambda_ptr, acoef_ptr, relco_ptr, alpha, beta, a_phi, NULL);
 
     ch_ldf_cell lphi;
     m_levelOps.create(lphi, a_rhs);
@@ -1195,14 +1198,15 @@ public:
   /**
      The only member data for this class is the stuff that comes in through the constructor.   
   **/
-  ch_dom              m_coarseDomain       ;
-  ConstitutiveRelation*      m_constRel           ;
-  BasalFrictionRelation*     m_basalFrictionRel   ;
-  Vector<ch_dbl>  m_grids          ;
-  Vector<int>                m_ref_rat       ;
-  ch_rv                   m_dxCrse             ;
-  IceThicknessIBC*           m_bc                 ;
-  int                        m_numLevels          ;
+  ch_dom                                  m_coarseDomain    ;
+  ConstitutiveRelation*                   m_constRel        ;
+  BasalFrictionRelation*                  m_basalFrictionRel;
+  Vector<RefCountedPtr<LevelSigmaCS > >   m_coordSys        ;
+  Vector<ch_dbl>                          m_grids           ;
+  Vector<int>                             m_ref_rat         ;
+  ch_rv                                   m_dxCrse          ;
+  IceThicknessIBC*                        m_bc              ;
+  int                                     m_numLevels       ;
 
 
   ///
@@ -1280,8 +1284,8 @@ public:
                           m_ref_rat         ,
                           m_dxCrse          ,
                           m_bc              ,
-                          m_numLevels       ,
                           m_coordSys        ,
+                          m_numLevels       ,
                           start_level       ,
                           refRatioToAMR     );
       retval = static_cast<ch_amrlevelop*>(ice_op_ptr);
