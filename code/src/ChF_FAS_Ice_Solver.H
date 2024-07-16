@@ -73,11 +73,11 @@ private:
       m_dx /= m_ref_rat[ilev];
     }
     m_dbl = m_grids[m_start_level];
-    if(m_ref_ratioToAMR  > 1)
+    if(m_ref_ratio_to_AMR  > 1)
     {
-      m_dom.coarsen(m_ref_ratioToAMR);
-      m_dbl.coarsen(m_ref_ratioToAMR);
-      m_dx *= m_ref_ratioToAMR;
+      m_dom.coarsen(m_ref_ratio_to_AMR);
+      m_dbl.coarsen(m_ref_ratio_to_AMR);
+      m_dx *= m_ref_ratio_to_AMR;
     }
 
     m_grad.define(m_dbl, SpaceDim*SpaceDim, ch_iv::Unit);
@@ -97,7 +97,8 @@ private:
   Vector<RefCountedPtr<LevelSigmaCS > >   m_coordSys;
   int                          m_numLevels          ;
   int                          m_start_level        ;
-  int                          m_ref_ratioToAMR     ;
+  int                          m_ref_ratio_to_AMR     ;
+  Vector<ch_ldf*>              m_acoef_cell         ;
   ///this is the local member data (defined at construction)
   /**
      I am trying to keep this at a minimum but more may creep in here for performance reasons.
@@ -105,14 +106,61 @@ private:
   ch_dom                       m_dom;
   ch_dbl                       m_dbl;
   ch_ldf_cell                  m_grad;
+  ch_ldf_cell                  m_acoef_cell;
   Real                         m_dx;
-  LevelDataOps<ch_fab_cell>      m_levelOps;
+  LevelDataOps<ch_fab_cell>    m_levelOps;
 
       
 public:
   ///destructor  is trivial but has to be virtual
   virtual ~ChF_Ice_Viscous_Tensor_Op(){;}
 
+  ///taken from ViscousTensorOp::defineRelCoef() 
+  void  computeRelaxationCoefficient( RefCountedPtr< ch_ldf_cell >       &      a_relco,
+                                      const RefCountedPtr< ch_ldf_flux > &      a_eta,
+                                      const RefCountedPtr< ch_ldf_flux > &      a_lambda,
+                                      const RefCountedPtr< ch_ldf_cell > &      a_acoef_cell,
+                                      const Real                         &      a_alpha,
+                                      const Real                         &      a_beta)
+  
+  {
+
+    ch_dit dit = m_dbl.dataIterator();
+    for (int ibox = 0; ibox < dit.size(); ibox++)
+    {
+      const Box& grid = m_dbl[dit[ibox]];
+      const ch_fab_flux& eta =        (*a_eta)[dit[ibox]];
+      const ch_fab_flux& lam =     (*a_lambda)[dit[ibox]];
+      const ch_fab_cell& aco = (*a_acoef_cell)[dit[ibox]];
+      ch_fab_cell& relco     =      (*a_relco)[dit[ibox]];
+      for (int ivar = 0; ivar < SpaceDim; ivar++)
+      {
+        int isrc = 0; int idst = ivar; int inco = 1;
+        relco.copy(aco,isrc,idst,inco);
+      }
+      relco  *= a_alpha;
+      int ncomp = SpaceDim;
+      for (int idir = 0; idir < SpaceDim; idir++)
+      {
+        FORT_DECRINVRELCOEFVTOP(CHF_FRA(relco),
+                                CHF_FRA(   eta[idir]),
+                                CHF_FRA(lambda[idir]),
+                                CHF_CONST_REAL(a_beta),
+                                CHF_BOX(grid),
+                                CHF_REAL(m_dx),
+                                CHF_INT(idir),
+                                CHF_INT(ncomp));
+
+      }
+
+      Real safety = 1.; //under-relaxation parameter
+      FORT_INVERTLAMBDAVTOP(CHF_FRA(m_relaxCoef[dit()]),
+                            CHF_REAL(safety),
+                            CHF_BOX(grid),
+                            CHF_INT(ncomp));
+
+    }
+  }
   ///
   /**
      Compute coefficients needed for the operator 
@@ -121,7 +169,7 @@ public:
   **/
   void  computeCoefficients( RefCountedPtr< ch_ldf_flux >       &      a_eta,
                              RefCountedPtr< ch_ldf_flux >       &      a_lambda,
-                             RefCountedPtr< ch_ldf_cell >       &      a_acoef,
+                             RefCountedPtr< ch_ldf_cell >       &      a_acoef_cell,
                              RefCountedPtr< ch_ldf_cell >       &      a_relco,
                              Real                               &      a_alpha,
                              Real                               &      a_beta,
@@ -133,101 +181,58 @@ public:
     /** NonlinearViscousTensorOp:
         Real m_scale; // scale mu,alpha by 1/m_scale 
         So we set scale = 1.
-
-      Vector<RefCountedPtr<LevelSigmaCS > > m_coordSys;
-      (*m_constRelPtr).computeFaceMu(levelMu,...levelCoords
     **/
     Real scale = 1.;
+    /**
+       PetscSolver says alpha = -1, beta = 1;
+     **/
+    a_alpha = -1.;
+    a_beta  =  1.;
+    
     LevelSigmaCS& level_coords = *m_coordSys[m_start_level]; ///not sure about this bit
     int ref_to_coar = 4586;
     if(m_start_level > 0)
     {  
       ref_to_coar = m_ref_rat[m_start_level-1];
     }
+
+    /// acoef_cell gets sent into the solve.   but to
+    ///make memory management easier, I will just use copy.
+    a_acoef_cell = RefCountedPtr<ch_ldf_cell>(new ch_ldf_cell(m_dbl, 1, IntVect::Zero()));
+    const ch_ldf_cell* acoef_amr  = m_acoef_cell[m_start_level];
+
+    if(m_ref_ratio_to_AMR == 1)
+    {
+      Interval interv(0,0);
+      acoef_amr->copyTo(interv, a_acoef_cell, interv);
+    }
+    else
+    {
+      this->restriction(*acoef_cell_ptr, *acoef_amr, m_ref_ratio_to_AMR);
+    }
+
+    ///acoef_flux = average of acoef_cell to faces
+    ch_ldf_flux acoef_flux(m_dbl, a_acoef_cell.nComp(), ch_iv::Zero());
+    CellToEdge( a_acoef_cell, acoef_flux);
     
+    //reverse-engineered from PetscSolver
     m_constRel->computeFaceMu(*a_eta,  //called mu
                               a_phi_fine, scale, a_phi_coar_ptr,
                               ref_to_coar,
-                              *a_lambda, // Glenn's law A ?
+                              acoef_flux,
                               level_coords,
                               m_dom,
                               ch_iv::Zero);
-     
 
-    /** NonlinearViscousTensorOp:
-     **/
-
-    /** NonlinearViscousTensorOp:
-     **/
-    /**
-      (*m_constRelPtr).computeFaceMu(levelMu,
-                                     levelVel, m_scale, 
-                                     crseVelPtr,
-                                     nRefCrse,
-                                     *m_faceA[lev],
-                                     levelCoords,
-				     levelDomain,
-                                     IntVect::Zero);
-
-      // now limit and  multiply by ice thickness H
-      const LevelData<FluxBox>& faceH = levelCoords.getFaceH();
-      LevelData<FluxBox>* muCoefPtr = m_muCoef[lev];
-      for (dit.begin(); dit.ok(); ++dit)
-        {
-          for (int dir=0; dir<SpaceDim; dir++)
-            {
-	      FArrayBox& thisMu = levelMu[dit][dir];
-	      const Box& box = thisMu.box();
-	       
-	      FORT_MAXFAB1(CHF_FRA(thisMu),
-	       		  CHF_CONST_REAL(m_muMin),
-	       		  CHF_BOX(box));
-
-	      if (muCoefPtr!=NULL)
-		{
-		  levelMu[dit][dir].mult( (*muCoefPtr)[dit][dir] );
-		}
-
-	      Box facebox = levelGrids[dit].surroundingNodes(dir);
-	      CH_assert(levelMu[dit][dir].min(facebox) >= 0.0);
-
-              levelMu[dit][dir].mult(faceH[dit][dir],
-                                    levelMu[dit][dir].box(),0,0,1);
-	    
-	      FORT_MINFAB1(CHF_FRA(thisMu),
-	       		  CHF_CONST_REAL(m_muMax),
-	       		  CHF_BOX(box));
-
-	    }
-        
-	  // also update alpha
-          const Box& gridBox = levelGrids[dit];
-
-	  m_basalFrictionRelPtr->computeAlpha
-		      (levelAlpha[dit], levelVel[dit], levelC[dit] , m_scale, 	
-	     levelCoords, dit, lev, gridBox);
-	  levelAlpha[dit] += (*m_C0[lev])[dit];
-
-	  //artificial drag
-	  if (m_artificialDragCoef > 0.0)
-	    {
-	      const Real& a = m_artificialDragCoef;
-	      Real asq = a*a; 
-	      Real p = 0.5*(m_artificialDragPower-1.0);
-	      const FArrayBox& u = levelVel[dit];
-	      for ( BoxIterator bit(gridBox); bit.ok(); ++bit)
-		{
-		  const IntVect& iv = bit();
-		  Real usq = D_TERM(u(iv,0)*u(iv,0), + u(iv,1)*u(iv,1), + u(iv,2)*u(iv,2));
-		  levelAlpha[dit](iv) += std::pow(asq * usq,p)*a; // alpha = a^(n-1) |u|^(n-1) a  => |alpha*u| = a^n |u|^n
- 		}
-	    }
-	  CH_assert(levelAlpha[dit].min(gridBox) >= 0.0);
-
-	  
-	} // end loop over grids		
-
-    **/
+    /// PetscSolver says that lamdda = 2*mu = 2*eta.  Not sure why.
+    ch_dit dit_fine = m_dbl.dataIterator();
+    for(int ibox = 0; ibox < dit_fine.size(); ibox++)
+    {
+      (*a_lambda)[dit[ibox]].copy((*a_eta)[dit[ibox]]);
+      (*a_lambda)[dit[ibox]] *= 2.;
+    }
+    
+    computeRelaxationCoefficient(a_relco, a_eta, a_lambda, a_acoef_cell, a_alpha, a_beta);
     
   }
       
@@ -236,6 +241,7 @@ public:
   ChF_Ice_Viscous_Tensor_Op(const ch_dom                          &  a_coarseDomain       ,
                             ConstitutiveRelation                  *  a_constRel           ,
                             BasalFrictionRelation                 *  a_basalFrictionRel   ,
+                            const Vector<ch_ldf*>                 &  a_acoef_cell         ,
                             const Vector<ch_dbl>                  &  a_grids              ,
                             const Vector<int>                     &  a_ref_rat            ,
                             const ch_rv                           &  a_dxCrse             ,
@@ -243,12 +249,13 @@ public:
                             Vector<RefCountedPtr<LevelSigmaCS > > &  a_coordSys           ,
                             int                                      a_numLevels          ,
                             int                                      a_start_level        ,
-                            int                                      a_ref_ratioToAMR     )
+                            int                                      a_ref_ratio_to_AMR     )
   {
 
     m_coarseDomain       = a_coarseDomain     ;
     m_constRel           = a_constRel         ;
     m_basalFrictionRel   = a_basalFrictionRel ;
+    m_acoef_cell         = a_acoef_cell       ;
     m_grids              = a_grids            ;
     m_ref_rat            = a_ref_rat          ;
     m_dxCrse             = a_dxCrse           ;
@@ -256,7 +263,7 @@ public:
     m_coordSys           = a_coordSys         ;
     m_numLevels          = a_numLevels        ;
     m_start_level        = a_start_level      ;
-    m_ref_ratioToAMR     = a_ref_ratioToAMR   ;
+    m_ref_ratio_to_AMR   = a_ref_ratio_to_AMR ;
     defineLocalData();
   }
 
@@ -1201,6 +1208,7 @@ public:
   ch_dom                                  m_coarseDomain    ;
   ConstitutiveRelation*                   m_constRel        ;
   BasalFrictionRelation*                  m_basalFrictionRel;
+  Vector<ch_ldf_cell* >                   m_acoef_cell      ;
   Vector<RefCountedPtr<LevelSigmaCS > >   m_coordSys        ;
   Vector<ch_dbl>                          m_grids           ;
   Vector<int>                             m_ref_rat         ;
@@ -1210,20 +1218,22 @@ public:
 
 
   ///
-  ChF_Ice_VTO_Factory(const ch_dom&              a_coarseDomain       ,
+  ChF_Ice_VTO_Factory(const ch_dom&                     a_coarseDomain       ,
                       ConstitutiveRelation*             a_constRel           ,
                       BasalFrictionRelation*            a_basalFrictionRel   ,
-                      const Vector<ch_dbl>&  a_vectGrids          ,
-                      const Vector<int>&                a_ref_rat       ,
-                      const ch_rv&                   a_dxCrse             ,
+                      const Vector<ch_ldf_cell* >     & a_acoef_cell         ,
+                      const Vector<ch_dbl>            & a_vectGrids          ,
+                      const Vector<int>               & a_ref_rat            ,
+                      const ch_rv                     & a_dxCrse             ,
                       IceThicknessIBC*                  a_bc                 ,
                       int                               a_numLevels          )
   {
     m_coarseDomain       =  a_coarseDomain    ;
     m_constRel           =  a_constRel        ;
     m_basalFrictionRel   =  a_basalFrictionRel;
-    m_grids          =  a_vectGrids       ;
-    m_ref_rat       =  a_ref_rat    ;
+    m_acoef_cell         =  a_acoef_cell      ;
+    m_grids              =  a_vectGrids       ;
+    m_ref_rat            =  a_ref_rat         ;
     m_dxCrse             =  a_dxCrse          ;
     m_bc                 =  a_bc              ;
     m_numLevels          =  a_numLevels       ;
@@ -1436,10 +1446,10 @@ public:
                     Real& a_finalResidualNorm,   //poached from AMRFASMultiGrid
                     const Real a_convergenceMetric,
                     const Vector<ch_ldf_cell* >& a_rhs,      
-                    const Vector<ch_ldf_cell* >& a_C,
-                    const Vector<ch_ldf_cell* >& a_C0,
-                    const Vector<ch_ldf_cell* >& a_A,
-                    const Vector<ch_ldf_cell* >& a_muCoef,
+                    const Vector<ch_ldf_cell* >& a_C, //a_beta in petsc  used in basalfriction
+                    const Vector<ch_ldf_cell* >& a_C0,//a_beta0 in petsc used in basalfriction
+                    const Vector<ch_ldf_cell* >& a_acoef_cell, // IMPORTANT.
+                    const Vector<ch_ldf_cell* >& a_muCoef,//ignoring this one 
                     Vector<RefCountedPtr<LevelSigmaCS > >& a_coordSys,
                     Real a_time,
                     int a_lbase, int a_maxLevel)
@@ -1447,6 +1457,7 @@ public:
     ch_ice_fact   ice_factory(m_coarseDomain       ,
                               m_constRel           ,
                               m_basalFrictionRel   ,
+                              a_acoef_cell         ,
                               m_grids              ,
                               m_ref_rat            ,
                               m_dxCrse             ,

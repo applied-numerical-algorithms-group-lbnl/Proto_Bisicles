@@ -1,0 +1,31 @@
+\documentclass{article}
+
+\bibliographystyle{plain}
+
+\usepackage{epsfig}
+\usepackage{xcolor}
+\usepackage{amsmath}
+
+\input{abbrev.tex}
+
+\begin{document}
+
+\title{Computing coefficients for the velocity solve}
+\author{  D. T. Graves }
+\maketitle
+\section{Notation}
+Given constants $\alpha, beta$,
+the viscous tensor operator takes the form
+\begin{equation}
+  L(\vel) = \alpha A \vel + \beta Div(F)
+\end{equation}
+Where the flux $F$ is given by
+\begin{equation}
+  F(\vel) = eta*(grad(\vel)  + grad(vel)^T) + lambda*I*div(vel)
+\end{equation}
+
+\end{document}
+
+\begin{verbatim}
+  
+\end{verbatim}
