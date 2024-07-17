@@ -214,6 +214,7 @@ public:
     ch_ldf_flux acoef_flux(m_dbl, a_acoef_cell->nComp(), ch_iv::Zero);
     CellToEdge( *a_acoef_cell, acoef_flux);
     
+    a_eta = RefCountedPtr<ch_ldf_flux>(new ch_ldf_flux(m_dbl, 1, ch_iv::Zero));
     //reverse-engineered from PetscSolver
     m_constRel->computeFaceMu(*a_eta,  //called mu
                               a_phi_fine, scale, a_phi_coar_ptr,
