@@ -87,18 +87,18 @@ private:
         
 
   ///This is  the stuff that came in during construction
-  ch_dom                       m_coarseDomain       ;
-  ConstitutiveRelation*        m_constRel           ;
-  BasalFrictionRelation*       m_basalFrictionRel   ;
-  Vector<ch_dbl>               m_grids              ;
-  Vector<int>                  m_ref_rat            ;
-  ch_rv                        m_dxCrse             ;
-  IceThicknessIBC*             m_bc                 ;
-  Vector<RefCountedPtr<LevelSigmaCS > >   m_coordSys;
-  int                          m_numLevels          ;
-  int                          m_start_level        ;
-  int                          m_ref_ratio_to_AMR     ;
-  Vector<ch_ldf*>              m_acoef_cell         ;
+  ch_dom                                  m_coarseDomain       ;
+  ConstitutiveRelation*                   m_constRel           ;
+  BasalFrictionRelation*                  m_basalFrictionRel   ;
+  Vector<ch_dbl>                          m_grids              ;
+  Vector<int>                             m_ref_rat            ;
+  ch_rv                                   m_dxCrse             ;
+  IceThicknessIBC*                        m_bc                 ;
+  Vector<RefCountedPtr<LevelSigmaCS > >   m_coordSys           ;
+  int                                     m_numLevels          ;
+  int                                     m_start_level        ;
+  int                                     m_ref_ratio_to_AMR   ;
+  Vector<ch_ldf_cell*>                    m_acoef_cell         ;
   ///this is the local member data (defined at construction)
   /**
      I am trying to keep this at a minimum but more may creep in here for performance reasons.
@@ -106,7 +106,6 @@ private:
   ch_dom                       m_dom;
   ch_dbl                       m_dbl;
   ch_ldf_cell                  m_grad;
-  ch_ldf_cell                  m_acoef_cell;
   Real                         m_dx;
   LevelDataOps<ch_fab_cell>    m_levelOps;
 
@@ -129,10 +128,10 @@ public:
     for (int ibox = 0; ibox < dit.size(); ibox++)
     {
       const Box& grid = m_dbl[dit[ibox]];
-      const ch_fab_flux& eta =        (*a_eta)[dit[ibox]];
-      const ch_fab_flux& lam =     (*a_lambda)[dit[ibox]];
-      const ch_fab_cell& aco = (*a_acoef_cell)[dit[ibox]];
-      ch_fab_cell& relco     =      (*a_relco)[dit[ibox]];
+      ch_fab_flux& eta       = (ch_fab_flux&)(       (*a_eta)[dit[ibox]]);
+      ch_fab_flux& lam       = (ch_fab_flux&)(    (*a_lambda)[dit[ibox]]);
+      ch_fab_cell& aco       = (ch_fab_cell&)((*a_acoef_cell)[dit[ibox]]);
+      ch_fab_cell& relco     =                     (*a_relco)[dit[ibox]];
       for (int ivar = 0; ivar < SpaceDim; ivar++)
       {
         int isrc = 0; int idst = ivar; int inco = 1;
@@ -143,8 +142,8 @@ public:
       for (int idir = 0; idir < SpaceDim; idir++)
       {
         FORT_DECRINVRELCOEFVTOP(CHF_FRA(relco),
-                                CHF_FRA(   eta[idir]),
-                                CHF_FRA(lambda[idir]),
+                                CHF_FRA(eta[idir]),
+                                CHF_FRA(lam[idir]),
                                 CHF_CONST_REAL(a_beta),
                                 CHF_BOX(grid),
                                 CHF_REAL(m_dx),
@@ -154,7 +153,7 @@ public:
       }
 
       Real safety = 1.; //under-relaxation parameter
-      FORT_INVERTLAMBDAVTOP(CHF_FRA(m_relaxCoef[dit()]),
+      FORT_INVERTLAMBDAVTOP(CHF_FRA(relco),
                             CHF_REAL(safety),
                             CHF_BOX(grid),
                             CHF_INT(ncomp));
@@ -198,22 +197,22 @@ public:
 
     /// acoef_cell gets sent into the solve.   but to
     ///make memory management easier, I will just use copy.
-    a_acoef_cell = RefCountedPtr<ch_ldf_cell>(new ch_ldf_cell(m_dbl, 1, IntVect::Zero()));
-    const ch_ldf_cell* acoef_amr  = m_acoef_cell[m_start_level];
+    a_acoef_cell = RefCountedPtr<ch_ldf_cell>(new ch_ldf_cell(m_dbl, 1, ch_iv::Zero));
+    ch_ldf_cell* acoef_amr  = (ch_ldf_cell*)m_acoef_cell[m_start_level];
 
     if(m_ref_ratio_to_AMR == 1)
     {
       Interval interv(0,0);
-      acoef_amr->copyTo(interv, a_acoef_cell, interv);
+      acoef_amr->copyTo(interv, *a_acoef_cell, interv);
     }
     else
     {
-      this->restriction(*acoef_cell_ptr, *acoef_amr, m_ref_ratio_to_AMR);
+      this->restriction(*a_acoef_cell, *acoef_amr, m_ref_ratio_to_AMR);
     }
 
     ///acoef_flux = average of acoef_cell to faces
-    ch_ldf_flux acoef_flux(m_dbl, a_acoef_cell.nComp(), ch_iv::Zero());
-    CellToEdge( a_acoef_cell, acoef_flux);
+    ch_ldf_flux acoef_flux(m_dbl, a_acoef_cell->nComp(), ch_iv::Zero);
+    CellToEdge( *a_acoef_cell, acoef_flux);
     
     //reverse-engineered from PetscSolver
     m_constRel->computeFaceMu(*a_eta,  //called mu
@@ -225,8 +224,8 @@ public:
                               ch_iv::Zero);
 
     /// PetscSolver says that lamdda = 2*mu = 2*eta.  Not sure why.
-    ch_dit dit_fine = m_dbl.dataIterator();
-    for(int ibox = 0; ibox < dit_fine.size(); ibox++)
+    ch_dit dit = m_dbl.dataIterator();
+    for(int ibox = 0; ibox < dit.size(); ibox++)
     {
       (*a_lambda)[dit[ibox]].copy((*a_eta)[dit[ibox]]);
       (*a_lambda)[dit[ibox]] *= 2.;
@@ -241,7 +240,7 @@ public:
   ChF_Ice_Viscous_Tensor_Op(const ch_dom                          &  a_coarseDomain       ,
                             ConstitutiveRelation                  *  a_constRel           ,
                             BasalFrictionRelation                 *  a_basalFrictionRel   ,
-                            const Vector<ch_ldf*>                 &  a_acoef_cell         ,
+                            const Vector<ch_ldf_cell*>            &  a_acoef_cell         ,
                             const Vector<ch_dbl>                  &  a_grids              ,
                             const Vector<int>                     &  a_ref_rat            ,
                             const ch_rv                           &  a_dxCrse             ,
@@ -1290,6 +1289,7 @@ public:
         = new ch_ice_op(  m_coarseDomain    ,
                           m_constRel        ,
                           m_basalFrictionRel,
+                          m_acoef_cell      ,
                           m_grids           ,
                           m_ref_rat         ,
                           m_dxCrse          ,
@@ -1343,6 +1343,7 @@ public:
         = new ch_ice_op(  m_coarseDomain       ,
                           m_constRel           ,
                           m_basalFrictionRel   ,
+                          m_acoef_cell         ,
                           m_grids              ,
                           m_ref_rat            ,
                           m_dxCrse             ,
