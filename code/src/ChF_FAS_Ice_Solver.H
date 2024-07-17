@@ -1059,11 +1059,6 @@ public:
     {
       retval = m_ref_rat[m_start_level-1];
     }
-    else
-    {
-      ch_mayday::Error("chf_fas::confusion: refToCoarser called when there is no coarser");
-    }
-
     return retval;
   }
   
@@ -1217,15 +1212,16 @@ public:
 
 
   ///
-  ChF_Ice_VTO_Factory(const ch_dom&                     a_coarseDomain       ,
-                      ConstitutiveRelation*             a_constRel           ,
-                      BasalFrictionRelation*            a_basalFrictionRel   ,
-                      const Vector<ch_ldf_cell* >     & a_acoef_cell         ,
-                      const Vector<ch_dbl>            & a_vectGrids          ,
-                      const Vector<int>               & a_ref_rat            ,
-                      const ch_rv                     & a_dxCrse             ,
-                      IceThicknessIBC*                  a_bc                 ,
-                      int                               a_numLevels          )
+  ChF_Ice_VTO_Factory(const ch_dom&                          a_coarseDomain       ,
+                      ConstitutiveRelation*                  a_constRel           ,
+                      BasalFrictionRelation*                 a_basalFrictionRel   ,
+                      const Vector<ch_ldf_cell* >          & a_acoef_cell         ,
+                      const Vector<ch_dbl>                 & a_vectGrids          ,
+                      const Vector<int>                    & a_ref_rat            ,
+                      const ch_rv                          & a_dxCrse             ,
+                      IceThicknessIBC*                       a_bc                 ,
+                      Vector<RefCountedPtr<LevelSigmaCS > >& a_coordSys           ,
+                      int                                    a_numLevels          )
   {
     m_coarseDomain       =  a_coarseDomain    ;
     m_constRel           =  a_constRel        ;
@@ -1234,6 +1230,7 @@ public:
     m_grids              =  a_vectGrids       ;
     m_ref_rat            =  a_ref_rat         ;
     m_dxCrse             =  a_dxCrse          ;
+    m_coordSys           =  a_coordSys        ;
     m_bc                 =  a_bc              ;
     m_numLevels          =  a_numLevels       ;
   }
@@ -1463,6 +1460,7 @@ public:
                               m_ref_rat            ,
                               m_dxCrse             ,
                               m_bc                 ,
+                              a_coordSys           ,
                               m_numLevels          );
     ch_relax_solver relax_solver;
 
