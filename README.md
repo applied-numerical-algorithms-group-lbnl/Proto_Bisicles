@@ -6,6 +6,11 @@ and, as such, will be a frozen version of the ice sheet solver except for a few,
 well-identified locations.
 
 
+#Branches
+* master holds standard BISICLES
+* dev    is the devleopment branch and I will try to leave in stable places.
+* dtg_dev is for my compulsive code saves.
+
 # Notes:
 * BISICLES has a very nice system for version control that uses svn and python.
 * This system has been taken out of this repository since I did not want to reprogram it for git.
