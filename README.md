@@ -6,7 +6,7 @@ and, as such, will be a frozen version of the ice sheet solver except for a few,
 well-identified locations.
 
 
-#Branches
+# Branches
 * master holds standard BISICLES
 * dev    is the devleopment branch and I will try to leave in stable places.
 * dtg_dev is for my compulsive code saves.
