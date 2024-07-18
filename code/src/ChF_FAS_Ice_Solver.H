@@ -187,8 +187,8 @@ public:
      **/
     a_alpha = -1.;
     a_beta  =  1.;
-    
-    LevelSigmaCS& level_coords = *m_coordSys[m_start_level]; ///not sure about this bit
+    int num_layers = m_acoef_cell[0]->nComp(); // poor man's 3d using components for layers--from talk with dfm.
+    LevelSigmaCS& level_coords = *m_coordSys[m_start_level]; 
     int ref_to_coar = 4586;
     if(m_start_level > 0)
     {  
@@ -197,12 +197,12 @@ public:
 
     /// acoef_cell gets sent into the solve.   but to
     ///make memory management easier, I will just use copy.
-    a_acoef_cell = RefCountedPtr<ch_ldf_cell>(new ch_ldf_cell(m_dbl, 1, ch_iv::Zero));
+    a_acoef_cell = RefCountedPtr<ch_ldf_cell>(new ch_ldf_cell(m_dbl, num_layers, ch_iv::Zero));
     ch_ldf_cell* acoef_amr  = (ch_ldf_cell*)m_acoef_cell[m_start_level];
 
     if(m_ref_ratio_to_AMR == 1)
     {
-      Interval interv(0,0);
+      Interval interv(0,num_layers-1);
       acoef_amr->copyTo(interv, *a_acoef_cell, interv);
     }
     else
@@ -211,9 +211,11 @@ public:
     }
 
     ///acoef_flux = average of acoef_cell to faces
-    ch_ldf_flux acoef_flux(m_dbl, a_acoef_cell->nComp(), ch_iv::Zero);
+    ch_ldf_flux acoef_flux(m_dbl, num_layers, ch_iv::Zero);
     CellToEdge( *a_acoef_cell, acoef_flux);
-    
+    /**
+       PetscSolver has all layers sharing a coefficient (eta.nComp==1).
+     **/
     a_eta = RefCountedPtr<ch_ldf_flux>(new ch_ldf_flux(m_dbl, 1, ch_iv::Zero));
     //reverse-engineered from PetscSolver
     m_constRel->computeFaceMu(*a_eta,  //called mu
