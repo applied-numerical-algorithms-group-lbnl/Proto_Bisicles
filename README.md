@@ -8,22 +8,26 @@ well-identified locations.
 
 # Branches
 * master holds standard BISICLES
-* dev    is the devleopment branch and I will try to leave in stable places.
+* dev     is the devleopment branch. I will try to leave dev a in stable state.
 * dtg_dev is for my compulsive code saves.
 
 # Notes:
 * BISICLES has a very nice system for version control that uses svn and python.
 * This system has been taken out of this repository since I did not want to reprogram it for git.
-* The fortran-based FAS solver in BISICLES works with AMRFAS, which lives in a separate svn repository.
-* I include the code from the AMRFAS repository here.
-* The BISICLES make system is a bit odd.   I just use the Chombo one so there  is no mk directory here.
+* Also, the BISICLES make system is a bit odd.   I just use the Chombo one so there  is no mk directory here.
+* The old fortran-based FAS solver in BISICLES works with AMRFAS, which lives in a separate svn repository.
+* It did not converge for me so...
+* I wrote ChF_FAS_Ice_Solver based on AMRFASMultiGrid (which lives in Chombo).
+* The next task is to write Proto_FAS_Ice_Solver (also based on AMRFASMultiGrid) but using  Proto.
+* The Proto infrastructure is for for performance portability.   It will allow the velocity solve to run on the device.
+
 
 # Changed source files:
 * AmrIce.{H,cpp}
 
 # New Source files:
-* Proto_FAS_IceSolver.H
-* Proto_FAS_IceSolver.cpp
+*   CHF_FAS_Ice_Solver.H
+* Proto_FAS_Ice_Solver.H (to come)
 
 # New Directories:
 * code/exec2D/_fas_fortran holds fortran-based FAS solver input templates
