@@ -74,10 +74,12 @@ namespace PrChDebug
 {
   typedef   Chombo::IntVect                      ch_iv;
   typedef   Chombo::Box                          ch_box;
-  typedef   Chombo::FArrayBox                    ch_fab;
+  typedef   Chombo::FArrayBox                    ch_fab_cell;
+  typedef   Chombo::FluxBox                      ch_fab_flux;
   typedef   Chombo::DataIterator                 ch_dit;
   typedef   Chombo::DisjointBoxLayout            ch_dbl;
-  typedef   Chombo::LevelData<ch_fab>            ch_ldf;
+  typedef   Chombo::LevelData<ch_fab_cell>       ch_ldf_cell;
+  typedef   Chombo::LevelData<ch_fab_flux>       ch_ldf_flux;
                                                   
   typedef    Proto::Point                        pr_pt;
   typedef    Proto::Box                          pr_box;
@@ -104,7 +106,7 @@ namespace PrChDebug
   }
 
   void 
-  dumpCh(ch_fab* a_dataPtr, ch_box a_areaBox)
+  dumpCh(ch_fab_cell* a_dataPtr, ch_box a_areaBox)
   {
 
     if(a_dataPtr != NULL)
@@ -117,7 +119,7 @@ namespace PrChDebug
 
       ch_box area = a_areaBox;
 
-      ch_fab & data    =*a_dataPtr;
+      ch_fab_cell & data    =*a_dataPtr;
       ch_box databox   = a_dataPtr->box();
       ch_iv  hidata    =   databox.bigEnd();
       ch_iv  lodata    =   databox.smallEnd();
@@ -157,17 +159,35 @@ namespace PrChDebug
 #endif
       }// end loop over components
     } //end if not null
-  } //end function dumpAreaCh
+  } //end function dumpCh
 
   ///
   void 
-  dumpAreaCh(ch_fab* dataPtr)
+  dumpCellAreaCh(ch_fab_cell* dataPtr)
   {
-    static const ch_iv       s_areaLo(D_DECL( DBG_LOX, DBG_LOY, DBG_LOZ));
-    static const ch_iv       s_areaHi(D_DECL( DBG_HIX, DBG_HIY, DBG_HIZ));
-    static const ch_box     s_areaBox(s_areaLo, s_areaHi);
-    dumpCh(dataPtr, s_areaBox);
-  }
+    if(dataPtr != NULL)
+    {
+      static const ch_iv       s_areaLo(D_DECL( DBG_LOX, DBG_LOY, DBG_LOZ));
+      static const ch_iv       s_areaHi(D_DECL( DBG_HIX, DBG_HIY, DBG_HIZ));
+      static const ch_box     s_areaBox(s_areaLo, s_areaHi);
+      dumpCh(dataPtr, s_areaBox);
+    }
+  }///end function dumpCellAreaCh
+
+  ///
+  void 
+  dumpFluxAreaCh(ch_fab_flux* dataPtr)
+  {
+    if(dataPtr != NULL)
+    {
+      for(int idir = 0; idir <  DIM; idir++)
+      {
+        cout << "dumpFluxAreaCh: face direction = " << idir << ":" << endl;
+
+        dumpCellAreaCh(&((*dataPtr)[idir]));
+      }
+    }
+  } ///end function dumpFluxAreaCh
   
   ///
   void 
@@ -482,7 +502,7 @@ namespace PrChDebug
   
   /// print to screen (very neatly) data from the area whereever it is found in chombo data
   void 
-  dumpLDAreaCh(ch_ldf* dataPtr)
+  dumpLDCellAreaCh(ch_ldf_cell* dataPtr)
   {
     if(dataPtr != NULL)
     {
@@ -490,7 +510,7 @@ namespace PrChDebug
       static const ch_iv       s_areaHi(D_DECL( DBG_HIX, DBG_HIY, DBG_HIZ));
       static const ch_box     s_areaBox(s_areaLo, s_areaHi);
 
-      ch_ldf & data = *dataPtr;
+      ch_ldf_cell & data = *dataPtr;
       ch_dbl   grid = data.disjointBoxLayout();
       ch_dit  dit = data.dataIterator();
       for(int ibox = 0; ibox < dit.size(); ibox++)
@@ -512,6 +532,59 @@ namespace PrChDebug
     }
   }
 
+  void 
+  dumpLDFluxAreaCh(ch_ldf_flux* dataPtr)
+  {
+    if(dataPtr != NULL)
+    {
+      ///Good or bad, an API is a gift that keeps on giving.
+      static const ch_iv       s_areaLo(D_DECL( DBG_LOX, DBG_LOY, DBG_LOZ));
+      static const ch_iv       s_areaHi(D_DECL( DBG_HIX, DBG_HIY, DBG_HIZ));
+      static const ch_box     s_areaBox(s_areaLo, s_areaHi);
+      bool valid_only = VALID_ONLY;
+      
+      ch_ldf_flux &   data = *dataPtr;
+      ch_dbl   grid = data.disjointBoxLayout();
+      ch_dit  dit   = data.dataIterator();
+      for(int ibox = 0; ibox < dit.size(); ibox++)
+      {
+        ch_box valid = grid[dit[ibox]];
+        ch_box valid_area = valid & s_areaBox;
+        for(int idir = 0; idir < DIM; idir++)
+        {
+          cout << "dumpLDFluxAreaCh: face dir = " << idir 
+               << ", ibox = " << ibox 
+               << ", valid = " << valid << endl;
+
+          auto& fab_dir = data[dit[ibox]][idir];
+          ch_box  print_box_cell =  s_areaBox;
+          if(valid_only)
+          {
+            print_box_cell &= valid_area;
+          }
+          ch_iv lo_iv_cell = print_box_cell.smallEnd();
+          ch_iv hi_iv_cell = print_box_cell.bigEnd();
+          ///the compiler was not buying BASISV, for some reason
+          ch_iv basisv = ch_iv::Zero;  
+          basisv[idir] = 1;
+          /**
+             I am ignoring some Chombo::Box semantics having to do  with
+             box centering.   Box has a bunch of fancy functions to get
+             boxes of various centerings.    I can never keep them straight
+             so I just like to do simple stuff by hand.  The centering variable
+             print_box_face will tell you it is  cell-centered.
+             Since we are just using print_box_face as a BoxIterator generator, this
+             subtle Kung Fu should not matter here.
+          **/
+          ch_iv lo_iv_face = lo_iv_cell;
+          ch_iv hi_iv_face = hi_iv_cell + basisv;
+        
+          ch_box print_box_face(lo_iv_face, hi_iv_face);
+          dumpCh(&fab_dir, print_box_face);
+        } //end loop over face directions
+      }   //end loop over boxes
+    }     //end if(dataPtr != NULL)
+  }       //end function dumpLDFluxAreaCh
 
   ///
   void
@@ -783,7 +856,7 @@ namespace PrChDebug
       }
     }
   }
-  void dumpLDLayoutCh(ch_ldf* a_data_ptr)
+  void dumpLDLayoutCh(ch_ldf_cell* a_data_ptr)
   {
     if(a_data_ptr != NULL)
     {
@@ -799,8 +872,10 @@ inline void dummy_function_to_get_functions_into_symbol_table()
   PrChDebug::dumpLayoutPr(NULL);
   PrChDebug::dumpLDLayoutCh(NULL);
   PrChDebug::dumpLDLayoutPr(NULL);
-  PrChDebug::dumpAreaCh(NULL);
-  PrChDebug::dumpLDAreaCh(NULL);
+  PrChDebug::dumpCellAreaCh(NULL);
+  PrChDebug::dumpFluxAreaCh(NULL);
+  PrChDebug::dumpLDCellAreaCh(NULL);
+  PrChDebug::dumpLDFluxAreaCh(NULL);
   PrChDebug::dumpLDAreaPr(NULL);
   PrChDebug::dumpAreaVecPr(NULL);
   PrChDebug::dumpAreaThreePr(NULL);
