@@ -162,20 +162,69 @@ public:
   }
   ///
   /**
+     CellToEdge assumes that acoef_cell has correct ghost cells so we need to set them.
+     The coarser level can be NULL
+   **/
+  void
+  setACoefGhost( RefCountedPtr< ch_ldf_cell >      &      a_acoef_fine,
+                 ch_ldf_cell                       *      a_acoef_coar)
+  {
+    ///set Neumann at domain boundaries
+    ///interpolate to ghost cells.
+  }
+                 
+  ///
+  /**  
+       m_acoef_cell gets sent into the solver definitions.  
+       This fills in an acoef from that (appropriately coarsened for MG if necessary)
+       based upon class data (m_startLevel and m_ref_ratio_to_AMR).
+  **/  
+  void
+  fillACoefHolders( RefCountedPtr< ch_ldf_cell >       &      a_acoef_cell,
+                    RefCountedPtr< ch_ldf_flux >       &      a_acoef_flux)
+  {
+    ch_ldf_cell* acoef_amr_fine  = (ch_ldf_cell*)m_acoef_cell[m_start_level];
+    ch_ldf_cell* acoef_amr_coar  = NULL;
+    int amr_ref_rat = 4586;
+    if(m_start_level > 0)
+    {
+      acoef_amr_coar = (ch_ldf_cell*)m_acoef_cell[m_start_level-1];
+      amr_ref_rat = m_ref_rat[m_start_level-1];
+    }
+    
+    ch_ldf_cell* acoef_mg  = &(*a_acoef_cell);
+
+    if(m_ref_ratio_to_AMR == 1)
+    {
+      Interval interv(0,num_layers-1);
+      acoef_amr->copyTo(interv, *acoef_mg, interv);
+    }
+    else
+    {
+      this->restriction(*acoef_mg, *acoef_amr, m_ref_ratio_to_AMR);
+    }
+
+    ///acoef_flux = average of acoef_cell to faces
+    ///CellToEdge assumes ghost cell layer has already be correctly set.
+    setACoefCellGhost(a_acoef_cell, acoef_amr_coar, amr_ref_rat*m_ref_ratio_to_AMR);
+    CellToEdge( *a_acoef_cell, *a_acoef_flux);
+  }
+  
+  ///
+  /**
      Compute coefficients needed for the operator 
      given an input state and all that other stuff we saved.
      The formula below is inferred from NonlinearViscousTensor.cpp
   **/
-  void  computeCoefficients( RefCountedPtr< ch_ldf_flux >       &      a_eta,
-                             RefCountedPtr< ch_ldf_flux >       &      a_lambda,
-                             RefCountedPtr< ch_ldf_cell >       &      a_acoef_cell,
-                             RefCountedPtr< ch_ldf_cell >       &      a_relco,
-                             Real                               &      a_alpha,
-                             Real                               &      a_beta,
-                             ch_ldf_cell                        &      a_phi_fine,
-                             const ch_ldf_cell                  *      a_phi_coar_ptr
-                             )
-
+  void
+  computeCoefficients( RefCountedPtr< ch_ldf_flux >       &      a_eta,
+                       RefCountedPtr< ch_ldf_flux >       &      a_lambda,
+                       RefCountedPtr< ch_ldf_cell >       &      a_acoef_cell,
+                       RefCountedPtr< ch_ldf_cell >       &      a_relco,
+                       Real                               &      a_alpha,
+                       Real                               &      a_beta,
+                       ch_ldf_cell                        &      a_phi_fine,
+                       const ch_ldf_cell                  *      a_phi_coar_ptr)
   {
     /** NonlinearViscousTensorOp:
         Real m_scale; // scale mu,alpha by 1/m_scale 
@@ -195,24 +244,10 @@ public:
       ref_to_coar = m_ref_rat[m_start_level-1];
     }
 
-    /// acoef_cell gets sent into the solve.   but to
-    ///make memory management easier, I will just use copy.
-    a_acoef_cell = RefCountedPtr<ch_ldf_cell>(new ch_ldf_cell(m_dbl, num_layers, ch_iv::Zero));
-    ch_ldf_cell* acoef_amr  = (ch_ldf_cell*)m_acoef_cell[m_start_level];
+    a_acoef_cell = RefCountedPtr<ch_ldf_cell>(new ch_ldf_cell(m_dbl, num_layers, ch_iv::Unit));
+    RefCountedPtr<ch_ldf_flux>     acoef_flux(new ch_lef_flux(m_dbl, num_layers, ch_iv::Zero));
 
-    if(m_ref_ratio_to_AMR == 1)
-    {
-      Interval interv(0,num_layers-1);
-      acoef_amr->copyTo(interv, *a_acoef_cell, interv);
-    }
-    else
-    {
-      this->restriction(*a_acoef_cell, *acoef_amr, m_ref_ratio_to_AMR);
-    }
-
-    ///acoef_flux = average of acoef_cell to faces
-    ch_ldf_flux acoef_flux(m_dbl, num_layers, ch_iv::Zero);
-    CellToEdge( *a_acoef_cell, acoef_flux);
+    fillACoefHolders(a_acoef_cell, acoef_flux);
     /**
        PetscSolver has all layers sharing a coefficient (eta.nComp==1).
      **/
