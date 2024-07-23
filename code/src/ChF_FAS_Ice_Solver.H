@@ -20,6 +20,7 @@
 #include "ViscousTensorOpF_F.H"
 #include "AverageF_F.H"
 #include "InterpF_F.H"
+#include "QuadCFInterp.H"
 #include <memory>  //good title for a book
 #include "NamespaceHeader.H"
 
@@ -81,7 +82,7 @@ private:
     }
 
     m_grad.define(m_dbl, SpaceDim*SpaceDim, ch_iv::Unit);
-      
+    m_acoef_ghost_set = false;      
       
   }
         
@@ -108,7 +109,8 @@ private:
   ch_ldf_cell                  m_grad;
   Real                         m_dx;
   LevelDataOps<ch_fab_cell>    m_levelOps;
-
+  ///and one wee optimization
+  bool                         m_acoef_ghost_set;
       
 public:
   ///destructor  is trivial but has to be virtual
@@ -123,7 +125,7 @@ public:
                                       const Real                         &      a_beta)
   
   {
-
+    CH_TIME("ChF_ICE_VTO::computeRelaxationCoefficient");
     ch_dit dit = m_dbl.dataIterator();
     for (int ibox = 0; ibox < dit.size(); ibox++)
     {
@@ -166,11 +168,28 @@ public:
      The coarser level can be NULL
    **/
   void
-  setACoefGhost( RefCountedPtr< ch_ldf_cell >      &      a_acoef_fine,
-                 ch_ldf_cell                       *      a_acoef_coar)
+  setACoefCellGhost( RefCountedPtr< ch_ldf_cell >      &      a_acoef_fine,
+                     ch_ldf_cell                       *      a_acoef_coar,
+                     int                                      a_ref_rat)
   {
-    ///set Neumann at domain boundaries
-    ///interpolate to ghost cells.
+    CH_TIME("ChF_ICE_VTO::setACoefCellGhost");
+    if(!m_acoef_ghost_set)
+    {
+      ///only need to do this once since all the inputs come in at construction.
+      m_acoef_ghost_set = true;
+      ///set Neumann at domain boundaries
+      bool always_neumann = true;
+      fillDomainGhostCells(*a_acoef_fine, m_dom, always_neumann);
+      if(a_acoef_coar != NULL)
+      {
+        ch_dbl dbl_fine = a_acoef_fine->disjointBoxLayout();
+        ch_dbl dbl_coar = a_acoef_coar->disjointBoxLayout();
+        int ncomp = a_acoef_fine->nComp();
+        Real dx = 1; 
+        QuadCFInterp interpolator(dbl_fine, &dbl_coar, dx, a_ref_rat, ncomp, m_dom);
+        interpolator.coarseFineInterp(*a_acoef_fine, *a_acoef_coar);
+      }
+    }
   }
                  
   ///
@@ -183,6 +202,7 @@ public:
   fillACoefHolders( RefCountedPtr< ch_ldf_cell >       &      a_acoef_cell,
                     RefCountedPtr< ch_ldf_flux >       &      a_acoef_flux)
   {
+    CH_TIME("ChF_ICE_VTO::fillAcoefHolders");
     ch_ldf_cell* acoef_amr_fine  = (ch_ldf_cell*)m_acoef_cell[m_start_level];
     ch_ldf_cell* acoef_amr_coar  = NULL;
     int amr_ref_rat = 4586;
@@ -196,12 +216,12 @@ public:
 
     if(m_ref_ratio_to_AMR == 1)
     {
-      Interval interv(0,num_layers-1);
-      acoef_amr->copyTo(interv, *acoef_mg, interv);
+      Interval interv(0,a_acoef_cell->nComp());
+      acoef_amr_fine->copyTo(interv, *acoef_mg, interv);
     }
     else
     {
-      this->restriction(*acoef_mg, *acoef_amr, m_ref_ratio_to_AMR);
+      this->restriction(*acoef_mg, *acoef_amr_fine, m_ref_ratio_to_AMR);
     }
 
     ///acoef_flux = average of acoef_cell to faces
@@ -226,6 +246,7 @@ public:
                        ch_ldf_cell                        &      a_phi_fine,
                        const ch_ldf_cell                  *      a_phi_coar_ptr)
   {
+    CH_TIME("ChF_ICE_VTO::computeCoefficients");
     /** NonlinearViscousTensorOp:
         Real m_scale; // scale mu,alpha by 1/m_scale 
         So we set scale = 1.
@@ -245,7 +266,7 @@ public:
     }
 
     a_acoef_cell = RefCountedPtr<ch_ldf_cell>(new ch_ldf_cell(m_dbl, num_layers, ch_iv::Unit));
-    RefCountedPtr<ch_ldf_flux>     acoef_flux(new ch_lef_flux(m_dbl, num_layers, ch_iv::Zero));
+    RefCountedPtr<ch_ldf_flux>     acoef_flux(new ch_ldf_flux(m_dbl, num_layers, ch_iv::Zero));
 
     fillACoefHolders(a_acoef_cell, acoef_flux);
     /**
@@ -256,7 +277,7 @@ public:
     m_constRel->computeFaceMu(*a_eta,  //called mu
                               a_phi_fine, scale, a_phi_coar_ptr,
                               ref_to_coar,
-                              acoef_flux,
+                              *acoef_flux,
                               level_coords,
                               m_dom,
                               ch_iv::Zero);
@@ -289,6 +310,7 @@ public:
                             int                                      a_ref_ratio_to_AMR     )
   {
 
+    CH_TIME("ChF_ICE_VTO constructor");
     m_coarseDomain       = a_coarseDomain     ;
     m_constRel           = a_constRel         ;
     m_basalFrictionRel   = a_basalFrictionRel ;
@@ -306,7 +328,7 @@ public:
 
   ///
   /**
-     Poached from lib/src/AMRElliptic/ViscousTensorOp.cpp  tarted up.
+     Poached from lib/src/AMRElliptic/ViscousTensorOp.cpp  and neatened a bit.
      VTO has a bunch of options but I am only using piecewise constant.
   **/
   virtual void
@@ -352,7 +374,7 @@ public:
                      int                a_side,
                      int                a_comp,
                      int                a_nghost,
-                     bool a_reflectOdd)
+                     bool a_reflectOdd) const
   {
 
     CH_TIME("CHF_ICE_VTO::reflectBCSide");
@@ -401,18 +423,17 @@ public:
   } // end function homogDiriSide
 
 
-    ///
-    /**
-       From Base_Simplified_AMRLevelOP
-    **/
+  ///This is function is called for velocity and for a_coef 
   virtual void
-  fillGhostDataOutsideDomain(ch_ldf_cell          & a_lhs,
-                             const ch_dom    & a_domain) 
+  fillDomainGhostCells(ch_ldf_cell     & a_lhs,
+                       const ch_dom    & a_domain,
+                       bool a_alwaysNeumann) const
   {
     CH_TIME("CHF_ICE_VTO::fillGhostDataOutsideDomain");
     ch_dbl dbl = a_lhs.disjointBoxLayout();
     ch_dit dit = a_lhs.dataIterator();
     int nghost = a_lhs.ghostVect()[0];
+    int n_comp = a_lhs.nComp();
     for(int ibox = 0; ibox < dit.size(); ibox++)
     {
       const ch_box& valid =   dbl[dit[ibox]];
@@ -421,10 +442,15 @@ public:
       {
         for(int idir = 0; idir < SpaceDim; idir++)
         {
-          for(int icomp = 0; icomp < SpaceDim; icomp++)
+          for(int icomp = 0; icomp < n_comp; icomp++)
           {
-            //ye olde slipwall boundary condition
+            //ye olde slipwall boundary condition or always neumann
             bool is_diri = (idir == icomp);
+            if(a_alwaysNeumann)
+            {
+              is_diri = false;
+            }
+
             reflectBCSide(state,
                           valid,
                           m_dom,
@@ -437,6 +463,19 @@ public:
         }
       }
     }
+  }
+  ///
+  /**
+     From Base_Simplified_AMRLevelOP
+     this is function is called for velocity
+  **/
+  virtual void
+  fillGhostDataOutsideDomain(ch_ldf_cell     & a_lhs,
+                             const ch_dom    & a_domain) 
+  {
+    CH_TIME("CHF_ICE_VTO::fillGhostDataOutsideDomain");
+    bool always_neumann = false;
+    fillDomainGhostCells(a_lhs, a_domain, always_neumann);
   }
 
   ///
@@ -493,6 +532,7 @@ public:
            const ch_fab_cell  &      a_phi,
            const ch_box  &      a_grid)
   {
+    CH_TIME("ChF_ICE_VTO::cellGrad");
     CH_assert(a_gradPhi.nComp() == SpaceDim*SpaceDim);
     CH_assert(a_phi.nComp() == SpaceDim);
 
@@ -514,7 +554,7 @@ public:
   void
   fillGrad(const ch_ldf_cell&       a_phi)
   {
-    CH_TIME("ViscousTensorOp::fillGrad");  
+    CH_TIME("ChF_ICE_VTO::fillGrad");
     ch_ldf_cell& phi = (ch_ldf_cell&)a_phi;
     phi.exchange();
     const ch_dbl& grids = a_phi.disjointBoxLayout();
@@ -610,6 +650,7 @@ public:
                     const Real             a_dx)
   {
     //set divergence to zero everywhere
+    CH_TIME("ChF_ICE_VTO::getFaceDivAndGrad");
     a_faceDiv.setVal(0.);
 
     Box interiorFaceBox ;
@@ -676,11 +717,11 @@ public:
           const ch_fab_cell& a_gradData,
           const ch_fab_cell& a_etaFace,
           const ch_fab_cell& a_lambdaFace,
-          const Box&       a_faceBox,
-          int              a_dir,
-          Real             a_beta)
+          const Box&         a_faceBox,
+          int                a_dir,
+          Real               a_beta)
   {
-    CH_TIME("ViscousTensorOp::getflux");  
+    CH_TIME("CHF_ICE_VTO::getflux");  
 
     CH_assert(a_data.nComp() == SpaceDim);
     a_flux.resize(a_faceBox, a_data.nComp());
@@ -701,11 +742,11 @@ public:
                         const ch_fab_cell& a_faceGrad,
                         const ch_fab_cell& a_etaFace,
                         const ch_fab_cell& a_lambdaFace,
-                        const Box&       a_faceBox,
-                        int              a_dir)
+                        const Box&         a_faceBox,
+                        int                a_dir)
 
   {
-    CH_TIME("ViscousTensorOp::getFluxFromDivAndGrad");  
+    CH_TIME("CHF_ICE_VTO::getFluxFromDivAndGrad");  
     //copy the divergence into the diagonal component of the flux
     //diagonal component of the flux is the a_dir comp
     int dstcomp = a_dir;
