@@ -216,7 +216,7 @@ public:
 
     if(m_ref_ratio_to_AMR == 1)
     {
-      Interval interv(0,a_acoef_cell->nComp());
+      Interval interv(0,a_acoef_cell->nComp()-1);
       acoef_amr_fine->copyTo(interv, *acoef_mg, interv);
     }
     else
@@ -379,38 +379,57 @@ public:
 
     CH_TIME("CHF_ICE_VTO::reflectBCSide");
     ///only do stuff if we have ghost cells
-    if(!a_dom.domainBox().contains(a_state.box()))
+    ch_box valid_grown_side = a_valid;
+    if(a_side == 0)
     {
-      ///
-      int isign = 1;
-      if(a_side == 0)
-      {
-        isign = -1;
-      }
-      ch_box offdir_grown_dom_box = a_dom.domainBox();
+      valid_grown_side.growLo(a_dir, a_nghost);
+    }
+    else
+    {
+      valid_grown_side.growHi(a_dir, a_nghost);
+    }
+    ///see if we have anything outside the domain on that particular direction/side
+    if(!a_dom.domainBox().contains(valid_grown_side));
+    {
       ch_box offdir_grown_valid_b = a_valid;
       for(int idir = 0; idir < SpaceDim; idir++)
       {
         if(idir != a_dir)
         {
-          offdir_grown_dom_box.grow(idir, a_nghost);
           offdir_grown_valid_b.grow(idir, a_nghost);
         }
       }
-      //only grow by one.  need the starting cell for a row of ghost
-      ch_box start_box = offdir_grown_valid_b;
-      start_box.grow(1);
-      start_box.shift(a_dir, isign);
-      start_box &= offdir_grown_dom_box;
-      start_box.shift(a_dir, -isign);
-      //this should cover (with something reasonable) corners outside the domain
-      for (BoxIterator bit(start_box); bit.ok(); ++bit)
+      int isign = 1;
+      ch_iv iv_lo_valid = offdir_grown_valid_b.smallEnd();
+      ch_iv iv_hi_valid = offdir_grown_valid_b.bigEnd();
+      //first row of src cells
+      ch_iv iv_lo_src = iv_lo_valid;
+      ch_iv iv_hi_src = iv_hi_valid;
+      if(a_side == 0)
       {
-        ch_iv iv_first_ghost = bit();
+        isign = -1;
+        iv_hi_src[a_dir] = iv_lo_src[a_dir];
+      }
+      else
+      {
+        isign = 1;
+        iv_lo_src[a_dir] = iv_hi_src[a_dir];
+      }
+      Box src_box(iv_lo_src, iv_hi_src);
+      //this should cover (with something reasonable) corners outside the domain
+      for (BoxIterator bit(src_box); bit.ok(); ++bit)
+      {
+        ch_iv iv_first_src = bit();
+        ch_iv iv_first_dst = iv_first_src + isign*BASISV(a_dir);
         for(int ighost = 0; ighost < a_nghost; ighost++)
         {
-          ch_iv iv_src =  iv_first_ghost - (ighost+1)*isign*BASISV(a_dir);
-          ch_iv iv_dst =  iv_first_ghost + ( ighost )*isign*BASISV(a_dir);
+          int idir_src = iv_first_src[a_dir] - isign*ighost;
+          int idir_dst = iv_first_dst[a_dir] + isign*ighost;
+          ch_iv iv_src =  iv_first_src;
+          ch_iv iv_dst =  iv_first_dst;
+          iv_src[a_dir] = idir_src;
+          iv_dst[a_dir] = idir_dst;
+          
           Real reflectSign  = 1.;
           if(a_reflectOdd)
           {
