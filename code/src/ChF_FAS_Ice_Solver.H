@@ -173,13 +173,13 @@ public:
                      int                                      a_ref_rat)
   {
     CH_TIME("ChF_ICE_VTO::setACoefCellGhost");
-    a_acoef_fine->exchange();
     if(!m_acoef_ghost_set)
     {
       ///only need to do this once since all the inputs come in at construction.
       m_acoef_ghost_set = true;
       ///set Neumann at domain boundaries
       bool always_neumann = true;
+      //this has an exchange
       fillDomainGhostCells(*a_acoef_fine, m_dom, always_neumann);
       if(a_acoef_coar != NULL)
       {
@@ -450,35 +450,39 @@ public:
                        bool a_alwaysNeumann) const
   {
     CH_TIME("CHF_ICE_VTO::fillGhostDataOutsideDomain");
-    ch_dbl dbl = a_lhs.disjointBoxLayout();
-    ch_dit dit = a_lhs.dataIterator();
-    int nghost = a_lhs.ghostVect()[0];
-    int n_comp = a_lhs.nComp();
-    for(int ibox = 0; ibox < dit.size(); ibox++)
+    a_lhs.exchange();
+    if(!a_domain.isPeriodic())
     {
-      const ch_box& valid =   dbl[dit[ibox]];
-      ch_fab_cell      & state = a_lhs[dit[ibox]];
-      for(int iside = 0; iside < 1; iside++)
+      ch_dbl dbl = a_lhs.disjointBoxLayout();
+      ch_dit dit = a_lhs.dataIterator();
+      int nghost = a_lhs.ghostVect()[0];
+      int n_comp = a_lhs.nComp();
+      for(int ibox = 0; ibox < dit.size(); ibox++)
       {
-        for(int idir = 0; idir < SpaceDim; idir++)
+        const ch_box& valid =   dbl[dit[ibox]];
+        ch_fab_cell      & state = a_lhs[dit[ibox]];
+        for(int iside = 0; iside < 1; iside++)
         {
-          for(int icomp = 0; icomp < n_comp; icomp++)
+          for(int idir = 0; idir < SpaceDim; idir++)
           {
-            //ye olde slipwall boundary condition or always neumann
-            bool is_diri = (idir == icomp);
-            if(a_alwaysNeumann)
+            for(int icomp = 0; icomp < n_comp; icomp++)
             {
-              is_diri = false;
-            }
+              //ye olde slipwall boundary condition or always neumann
+              bool is_diri = (idir == icomp);
+              if(a_alwaysNeumann)
+              {
+                is_diri = false;
+              }
 
-            reflectBCSide(state,
-                          valid,
-                          m_dom,
-                          idir,
-                          iside,
-                          icomp,
-                          nghost,
-                          is_diri);
+              reflectBCSide(state,
+                            valid,
+                            m_dom,
+                            idir,
+                            iside,
+                            icomp,
+                            nghost,
+                            is_diri);
+            }
           }
         }
       }
@@ -495,6 +499,7 @@ public:
   {
     CH_TIME("CHF_ICE_VTO::fillGhostDataOutsideDomain");
     bool always_neumann = false;
+    //this has an exchange
     fillDomainGhostCells(a_lhs, a_domain, always_neumann);
   }
 
