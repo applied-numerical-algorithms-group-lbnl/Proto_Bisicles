@@ -1,8 +1,8 @@
 #ifndef ____Prch_print_Debugging_Tools____
 #define ____Prch_print_Debugging_Tools____
-#define DBG_LOX  0
+#define DBG_LOX  -1
 #define DBG_HIX  3
-#define DBG_LOY  0
+#define DBG_LOY  -1
 #define DBG_HIY  3
 #define DBG_LOZ  0
 #define DBG_HIZ  0

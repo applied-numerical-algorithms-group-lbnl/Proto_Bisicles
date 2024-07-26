@@ -173,6 +173,7 @@ public:
                      int                                      a_ref_rat)
   {
     CH_TIME("ChF_ICE_VTO::setACoefCellGhost");
+    a_acoef_fine->exchange();
     if(!m_acoef_ghost_set)
     {
       ///only need to do this once since all the inputs come in at construction.
